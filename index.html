@@ -64,7 +64,7 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         const GAME_W = 800;
-        const GAME_H = 550;
+        const GAME_H = 700;
         canvas.width = GAME_W;
         canvas.height = GAME_H;
 
@@ -123,8 +123,8 @@
 
         // --- JUGADORES ---
         const players = [
-            { name: 'GINO', color: '#003DA5', skinColor: '#FFCC80', hairColor: '#F9D853', height: 60, width: 35, best: null, skin: skins[0] },
-            { name: 'BENI', color: '#CE1126', skinColor: '#FFCC80', hairColor: '#F9D853', height: 48, width: 30, best: null, skin: skins[1] }
+            { name: 'GINO', color: '#003DA5', skinColor: '#FFCC80', hairColor: '#F9D853', height: 80, width: 46, best: null, skin: skins[0] },
+            { name: 'BENI', color: '#CE1126', skinColor: '#FFCC80', hairColor: '#F9D853', height: 65, width: 40, best: null, skin: skins[1] }
         ];
 
         const GRAVITY = 0.8;
@@ -168,7 +168,7 @@
         // --- JUEGO ---
         function initRun() {
             const p = players[currentPlayer];
-            const groundY = 470;
+            const groundY = 600;
             game = {
                 runner: {
                     x: 80, y: groundY - p.height,
@@ -215,36 +215,39 @@
 
             // Obstáculos contextuales por escenario
             if (sceneName === 'Bosque') {
-                if (rand < 0.35) { type = 'rock'; w = 30; h = 25; }
-                else if (rand < 0.65) { type = 'tronco'; w = 40; h = 30; }
-                else if (rand < 0.8) { type = 'hongo'; w = 22; h = 35; }
-                else { type = 'bird'; w = 40; h = 25; elevated = true; }
+                if (rand < 0.35) { type = 'rock'; w = 40; h = 35; }
+                else if (rand < 0.65) { type = 'tronco'; w = 55; h = 40; }
+                else if (rand < 0.8) { type = 'hongo'; w = 30; h = 48; }
+                else { type = 'bird'; w = 50; h = 30; elevated = true; }
             } else if (sceneName === 'Desierto') {
-                if (rand < 0.4) { type = 'cactus'; w = 20; h = 45; }
-                else if (rand < 0.7) { type = 'rock'; w = 30; h = 25; }
-                else if (rand < 0.85) { type = 'serpiente'; w = 35; h = 15; }
-                else { type = 'buitre'; w = 42; h = 25; elevated = true; }
+                if (rand < 0.4) { type = 'cactus'; w = 28; h = 60; }
+                else if (rand < 0.7) { type = 'rock'; w = 40; h = 35; }
+                else if (rand < 0.85) { type = 'serpiente'; w = 45; h = 20; }
+                else { type = 'buitre'; w = 55; h = 30; elevated = true; }
             } else if (sceneName === 'Nieve') {
-                if (rand < 0.35) { type = 'hielo'; w = 35; h = 28; }
-                else if (rand < 0.6) { type = 'snowman'; w = 28; h = 45; }
-                else if (rand < 0.8) { type = 'rock'; w = 30; h = 25; }
-                else { type = 'bird'; w = 40; h = 25; elevated = true; }
+                if (rand < 0.35) { type = 'hielo'; w = 45; h = 38; }
+                else if (rand < 0.6) { type = 'snowman'; w = 38; h = 60; }
+                else if (rand < 0.8) { type = 'rock'; w = 40; h = 35; }
+                else { type = 'bird'; w = 50; h = 30; elevated = true; }
             } else if (sceneName === 'Ciudad') {
-                if (rand < 0.35) { type = 'auto'; w = 50; h = 30; }
-                else if (rand < 0.6) { type = 'cono'; w = 18; h = 30; }
-                else if (rand < 0.8) { type = 'box'; w = 35; h = 35; }
-                else { type = 'cartel'; w = 45; h = 22; elevated = true; }
+                if (rand < 0.35) { type = 'auto'; w = 65; h = 40; }
+                else if (rand < 0.6) { type = 'cono'; w = 24; h = 40; }
+                else if (rand < 0.8) { type = 'box'; w = 45; h = 45; }
+                else { type = 'cartel'; w = 55; h = 28; elevated = true; }
             } else { // Espacio
-                if (rand < 0.35) { type = 'meteorito'; w = 32; h = 30; }
-                else if (rand < 0.6) { type = 'alien'; w = 28; h = 40; }
-                else if (rand < 0.8) { type = 'cristal'; w = 20; h = 45; }
-                else { type = 'satelite'; w = 45; h = 22; elevated = true; }
+                if (rand < 0.35) { type = 'meteorito'; w = 42; h = 40; }
+                else if (rand < 0.6) { type = 'alien'; w = 38; h = 55; }
+                else if (rand < 0.8) { type = 'cristal'; w = 28; h = 60; }
+                else { type = 'satelite'; w = 55; h = 28; elevated = true; }
             }
 
             const p = players[currentPlayer];
             let y;
             if (elevated) {
-                y = game.groundY - p.height + 5;
+                // Ocupa desde arriba hasta la altura del personaje parado
+                // Solo se puede esquivar agachándose, NO saltando
+                h = game.groundY - Math.floor(p.height * DUCK_HEIGHT_RATIO) - 20;
+                y = 0;
             } else {
                 y = game.groundY - h;
             }
@@ -873,41 +876,42 @@
                 ctx.closePath(); ctx.fill();
             }
 
-            // --- VOLADORES (agacharse) ---
-            else if (t === 'bird') {
-                drawBirdShape(o, '#F44336', '#D32F2F');
-                drawFlyingWarning(o);
-            } else if (t === 'buitre') {
-                drawBirdShape(o, '#5D4037', '#3E2723');
-                drawFlyingWarning(o);
-            } else if (t === 'cartel') {
-                ctx.fillStyle = '#FFD54F';
-                ctx.fillRect(o.x, o.y, o.w, o.h);
-                ctx.strokeStyle = '#F57F17';
-                ctx.lineWidth = 2;
-                ctx.strokeRect(o.x, o.y, o.w, o.h);
-                ctx.fillStyle = '#333';
-                ctx.font = 'bold 10px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('PELIGRO', o.x + o.w / 2, o.y + o.h * 0.65);
-                drawFlyingWarning(o);
-            } else if (t === 'satelite') {
-                ctx.fillStyle = '#B0BEC5';
-                ctx.fillRect(o.x + o.w * 0.3, o.y + o.h * 0.3, o.w * 0.4, o.h * 0.4);
-                // Paneles solares
-                ctx.fillStyle = '#1565C0';
-                ctx.fillRect(o.x, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
-                ctx.fillRect(o.x + o.w * 0.72, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
-                ctx.strokeStyle = '#90A4AE';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(o.x, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
-                ctx.strokeRect(o.x + o.w * 0.72, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
-                // Antena
-                ctx.fillStyle = '#EF5350';
-                ctx.beginPath();
-                ctx.arc(o.x + o.w * 0.5, o.y + o.h * 0.2, 3, 0, Math.PI * 2);
-                ctx.fill();
-                drawFlyingWarning(o);
+            // --- VOLADORES (solo agacharse) ---
+            // Hitbox es toda la columna, pero se dibujan visualmente cerca del suelo
+            else if (t === 'bird' || t === 'buitre' || t === 'cartel' || t === 'satelite') {
+                const gy = game ? game.groundY : 470;
+                const visH = 25;
+                const visY = gy - 55;
+                const vis = { x: o.x, y: visY, w: o.w, h: visH, wingFrame: o.wingFrame };
+
+                // Línea de peligro roja (muestra la zona)
+                ctx.fillStyle = 'rgba(255,0,0,0.08)';
+                ctx.fillRect(o.x - 2, 0, o.w + 4, gy - 20);
+
+                if (t === 'bird') drawBirdShape(vis, '#F44336', '#D32F2F');
+                else if (t === 'buitre') drawBirdShape(vis, '#5D4037', '#3E2723');
+                else if (t === 'cartel') {
+                    ctx.fillStyle = '#FFD54F';
+                    ctx.fillRect(vis.x, vis.y, vis.w, vis.h);
+                    ctx.strokeStyle = '#F57F17';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(vis.x, vis.y, vis.w, vis.h);
+                    ctx.fillStyle = '#333';
+                    ctx.font = 'bold 10px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('PELIGRO', vis.x + vis.w / 2, vis.y + vis.h * 0.7);
+                } else if (t === 'satelite') {
+                    ctx.fillStyle = '#B0BEC5';
+                    ctx.fillRect(vis.x + vis.w * 0.3, vis.y + 3, vis.w * 0.4, vis.h - 6);
+                    ctx.fillStyle = '#1565C0';
+                    ctx.fillRect(vis.x, vis.y + 2, vis.w * 0.28, vis.h - 4);
+                    ctx.fillRect(vis.x + vis.w * 0.72, vis.y + 2, vis.w * 0.28, vis.h - 4);
+                    ctx.fillStyle = '#EF5350';
+                    ctx.beginPath();
+                    ctx.arc(vis.x + vis.w * 0.5, vis.y + 2, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                drawFlyingWarning(vis);
             }
         }
 
