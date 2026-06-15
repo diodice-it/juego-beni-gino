@@ -45,17 +45,14 @@
         function resizeCanvas() {
             const w = window.innerWidth;
             const h = window.innerHeight;
-            if (isMobile) {
-                canvas.style.width = w + 'px';
-                canvas.style.height = h + 'px';
-                canvas.style.borderRadius = '0';
-            } else {
-                const scale = Math.min(w / GAME_W, h / GAME_H, 1);
-                canvas.style.width = Math.floor(GAME_W * scale) + 'px';
-                canvas.style.height = Math.floor(GAME_H * scale) + 'px';
-            }
+            // Escalar al máximo posible sin distorsionar
+            const scale = Math.min(w / GAME_W, h / GAME_H);
+            canvas.style.width = Math.floor(GAME_W * scale) + 'px';
+            canvas.style.height = Math.floor(GAME_H * scale) + 'px';
+            if (isMobile) canvas.style.borderRadius = '0';
         }
         window.addEventListener('resize', resizeCanvas);
+        screen.orientation && screen.orientation.addEventListener('change', resizeCanvas);
         resizeCanvas();
 
         // --- ESCENARIOS (cambian automáticamente cada X metros) ---
@@ -995,7 +992,7 @@
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.font = '11px Arial';
             ctx.textAlign = 'right';
-            ctx.fillText(isMobile ? 'Swipe ↑ Saltar  |  Swipe ↓ Agacharse' : '↑/ESPACIO = Saltar  |  ↓/S = Agacharse', 790, 55);
+            ctx.fillText(isMobile ? 'Swipe ↑ o Tap = Saltar  |  Swipe ↓ = Agacharse' : '↑/ESPACIO = Saltar  |  ↓/S = Agacharse', 790, 55);
         }
 
         // --- PANTALLAS ---
@@ -1351,16 +1348,20 @@
 
         // --- SWIPE TOUCH CONTROLS ---
         let touchStartY = 0;
+        let touchStartX = 0;
         let touchStartTime = 0;
-        const SWIPE_THRESHOLD = 30;
+        let touchHandled = false;
+        const SWIPE_THRESHOLD = 20;
 
-        canvas.addEventListener('touchstart', e => {
-            e.preventDefault();
+        document.addEventListener('touchstart', e => {
+            if (e.target === canvas || state === 'playing') e.preventDefault();
             const touch = e.touches[0];
             touchStartY = touch.clientY;
+            touchStartX = touch.clientX;
             touchStartTime = Date.now();
+            touchHandled = false;
 
-            // Para menús: tap directo
+            // Menús: tap directo
             if (state !== 'playing') {
                 const { x, y } = getCanvasCoords(e);
                 if (state === 'menu') goToSkinSelect();
@@ -1369,26 +1370,36 @@
                     if (idx >= 0) players[skinSelectPlayer].skin = skins[idx];
                     if (isSkinConfirmClick(x, y)) confirmSkin();
                 }
+                else if (state === 'dead') { /* esperar timer */ }
                 else if (state === 'finished') startNextPlayer();
                 else if (state === 'results') resetGame();
             }
-        });
+        }, { passive: false });
 
-        canvas.addEventListener('touchmove', e => {
+        document.addEventListener('touchmove', e => {
             e.preventDefault();
-            if (state !== 'playing') return;
+            if (state !== 'playing' || touchHandled) return;
             const touch = e.touches[0];
             const dy = touch.clientY - touchStartY;
 
-            // Swipe down en curso = agacharse
+            // Swipe down = agacharse
             if (dy > SWIPE_THRESHOLD && game.runner.grounded && !game.runner.ducking) {
                 game.runner.ducking = true;
                 game.runner.h = Math.floor(game.runner.normalH * DUCK_HEIGHT_RATIO);
                 game.runner.y = game.groundY - game.runner.h;
+                touchHandled = true;
             }
-        });
+            // Swipe up = saltar
+            if (dy < -SWIPE_THRESHOLD) {
+                if (game.runner.grounded && !game.runner.ducking) {
+                    game.runner.vy = JUMP_FORCE;
+                    game.runner.grounded = false;
+                }
+                touchHandled = true;
+            }
+        }, { passive: false });
 
-        canvas.addEventListener('touchend', e => {
+        document.addEventListener('touchend', e => {
             e.preventDefault();
             if (state !== 'playing') return;
 
@@ -1400,19 +1411,15 @@
                 return;
             }
 
-            // Detectar swipe up o tap rápido = saltar
-            const dt = Date.now() - touchStartTime;
-            const lastTouch = e.changedTouches[0];
-            const dy = lastTouch.clientY - touchStartY;
-
-            if (dy < -SWIPE_THRESHOLD || dt < 200) {
-                // Swipe up o tap = saltar
-                if (game.runner.grounded && !game.runner.ducking) {
+            // Tap rápido sin movimiento = saltar
+            if (!touchHandled) {
+                const dt = Date.now() - touchStartTime;
+                if (dt < 250 && game.runner.grounded && !game.runner.ducking) {
                     game.runner.vy = JUMP_FORCE;
                     game.runner.grounded = false;
                 }
             }
-        });
+        }, { passive: false });
 
         function goToSkinSelect() {
             skinSelectPlayer = 0;
