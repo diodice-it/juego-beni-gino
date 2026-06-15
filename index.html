@@ -28,41 +28,10 @@
             display: block;
             touch-action: none;
         }
-        #touch-controls {
-            display: none;
-            width: 100%;
-            flex: 1;
-            gap: 0;
-        }
-        #touch-controls button {
-            flex: 1;
-            border: none;
-            font-size: 28px;
-            font-weight: bold;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            -webkit-tap-highlight-color: transparent;
-        }
-        #btn-jump {
-            background: rgba(76,175,80,0.25);
-            color: rgba(255,255,255,0.7);
-        }
-        #btn-jump:active { background: rgba(76,175,80,0.5); }
-        #btn-duck {
-            background: rgba(255,152,0,0.25);
-            color: rgba(255,255,255,0.7);
-        }
-        #btn-duck:active { background: rgba(255,152,0,0.5); }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
-    <div id="touch-controls">
-        <button id="btn-jump">SALTAR</button>
-        <button id="btn-duck">AGACHARSE</button>
-    </div>
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -72,26 +41,18 @@
         canvas.height = GAME_H;
 
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || ('ontouchstart' in window && window.innerWidth < 900);
-        const touchControls = document.getElementById('touch-controls');
 
         function resizeCanvas() {
             const w = window.innerWidth;
             const h = window.innerHeight;
             if (isMobile) {
-                // Canvas toma la parte superior, botones abajo
-                const controlsH = Math.floor(h * 0.25); // 25% para botones
-                const canvasH = h - controlsH;
-                const scale = Math.min(w / GAME_W, canvasH / GAME_H);
-                canvas.style.width = Math.floor(GAME_W * scale) + 'px';
-                canvas.style.height = Math.floor(GAME_H * scale) + 'px';
+                canvas.style.width = w + 'px';
+                canvas.style.height = h + 'px';
                 canvas.style.borderRadius = '0';
-                touchControls.style.display = 'flex';
-                touchControls.style.height = controlsH + 'px';
             } else {
                 const scale = Math.min(w / GAME_W, h / GAME_H, 1);
                 canvas.style.width = Math.floor(GAME_W * scale) + 'px';
                 canvas.style.height = Math.floor(GAME_H * scale) + 'px';
-                touchControls.style.display = 'none';
             }
         }
         window.addEventListener('resize', resizeCanvas);
@@ -1034,7 +995,7 @@
             ctx.fillStyle = 'rgba(0,0,0,0.3)';
             ctx.font = '11px Arial';
             ctx.textAlign = 'right';
-            ctx.fillText(isMobile ? 'Usá los botones de abajo' : '↑/ESPACIO = Saltar  |  ↓/S = Agacharse', 790, 55);
+            ctx.fillText(isMobile ? 'Swipe ↑ Saltar  |  Swipe ↓ Agacharse' : '↑/ESPACIO = Saltar  |  ↓/S = Agacharse', 790, 55);
         }
 
         // --- PANTALLAS ---
@@ -1388,56 +1349,68 @@
             else if (state === 'results') resetGame();
         });
 
-        // Touch en canvas (para menús y skin select)
+        // --- SWIPE TOUCH CONTROLS ---
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        const SWIPE_THRESHOLD = 30;
+
         canvas.addEventListener('touchstart', e => {
             e.preventDefault();
-            const { x, y } = getCanvasCoords(e);
-            if (state === 'menu') goToSkinSelect();
-            else if (state === 'skinSelect') {
-                const idx = getSkinClickIndex(x, y);
-                if (idx >= 0) players[skinSelectPlayer].skin = skins[idx];
-                if (isSkinConfirmClick(x, y)) confirmSkin();
-            }
-            else if (state === 'playing' && !isMobile) {
-                // Fallback para tablets sin botones
-                if (game.runner.grounded && !game.runner.ducking) {
-                    game.runner.vy = JUMP_FORCE;
-                    game.runner.grounded = false;
+            const touch = e.touches[0];
+            touchStartY = touch.clientY;
+            touchStartTime = Date.now();
+
+            // Para menús: tap directo
+            if (state !== 'playing') {
+                const { x, y } = getCanvasCoords(e);
+                if (state === 'menu') goToSkinSelect();
+                else if (state === 'skinSelect') {
+                    const idx = getSkinClickIndex(x, y);
+                    if (idx >= 0) players[skinSelectPlayer].skin = skins[idx];
+                    if (isSkinConfirmClick(x, y)) confirmSkin();
                 }
+                else if (state === 'finished') startNextPlayer();
+                else if (state === 'results') resetGame();
             }
-            else if (state === 'finished') startNextPlayer();
-            else if (state === 'results') resetGame();
         });
 
-        // Botones touch dedicados
-        const btnJump = document.getElementById('btn-jump');
-        const btnDuck = document.getElementById('btn-duck');
-
-        btnJump.addEventListener('touchstart', e => {
+        canvas.addEventListener('touchmove', e => {
             e.preventDefault();
-            if (state === 'playing' && game.runner.grounded && !game.runner.ducking) {
-                game.runner.vy = JUMP_FORCE;
-                game.runner.grounded = false;
-            } else if (state === 'menu') goToSkinSelect();
-            else if (state === 'finished') startNextPlayer();
-            else if (state === 'results') resetGame();
-        });
+            if (state !== 'playing') return;
+            const touch = e.touches[0];
+            const dy = touch.clientY - touchStartY;
 
-        btnDuck.addEventListener('touchstart', e => {
-            e.preventDefault();
-            if (state === 'playing' && game.runner.grounded) {
+            // Swipe down en curso = agacharse
+            if (dy > SWIPE_THRESHOLD && game.runner.grounded && !game.runner.ducking) {
                 game.runner.ducking = true;
                 game.runner.h = Math.floor(game.runner.normalH * DUCK_HEIGHT_RATIO);
                 game.runner.y = game.groundY - game.runner.h;
             }
         });
 
-        btnDuck.addEventListener('touchend', e => {
+        canvas.addEventListener('touchend', e => {
             e.preventDefault();
-            if (state === 'playing' && game.runner.ducking) {
+            if (state !== 'playing') return;
+
+            // Soltar = dejar de agacharse
+            if (game.runner.ducking) {
                 game.runner.ducking = false;
                 game.runner.h = game.runner.normalH;
                 game.runner.y = game.groundY - game.runner.h;
+                return;
+            }
+
+            // Detectar swipe up o tap rápido = saltar
+            const dt = Date.now() - touchStartTime;
+            const lastTouch = e.changedTouches[0];
+            const dy = lastTouch.clientY - touchStartY;
+
+            if (dy < -SWIPE_THRESHOLD || dt < 200) {
+                // Swipe up o tap = saltar
+                if (game.runner.grounded && !game.runner.ducking) {
+                    game.runner.vy = JUMP_FORCE;
+                    game.runner.grounded = false;
+                }
             }
         });
 
