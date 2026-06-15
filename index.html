@@ -123,8 +123,8 @@
 
         // --- JUGADORES ---
         const players = [
-            { name: 'GINO', color: '#003DA5', skinColor: '#FFCC80', hairColor: '#F9D853', height: 80, width: 46, best: null, skin: skins[0] },
-            { name: 'BENI', color: '#CE1126', skinColor: '#FFCC80', hairColor: '#F9D853', height: 65, width: 40, best: null, skin: skins[1] }
+            { name: 'GINO', color: '#003DA5', skinColor: '#FFCC80', hairColor: '#F9D853', hairStyle: 'corto', height: 80, width: 46, best: null, skin: skins[0] },
+            { name: 'BENI', color: '#CE1126', skinColor: '#FFCC80', hairColor: '#5D4037', hairStyle: 'rulos', height: 65, width: 40, best: null, skin: skins[1] }
         ];
 
         const GRAVITY = 0.8;
@@ -907,6 +907,12 @@
                     ctx.fill();
                 }
 
+                const skinC = skin.skinTint || player.skinColor;
+
+                // Cuello ducking
+                ctx.fillStyle = skinC;
+                ctx.fillRect(x + w * 0.78, bodyTop + bodyH * 0.05, 6, 6);
+
                 ctx.fillStyle = skin.shirtColor;
                 ctx.fillRect(x + w * 0.05, bodyTop, w * 0.9, bodyH);
                 if (skin.stripe) {
@@ -914,27 +920,106 @@
                     ctx.fillRect(x + w * 0.05, bodyTop + bodyH * 0.35, w * 0.9, bodyH * 0.3);
                 }
 
-                const skinC = skin.skinTint || player.skinColor;
+                // Brazos ducking con manos
+                ctx.strokeStyle = skinC;
+                ctx.lineWidth = 3.5;
+                const dArmY = bodyTop + bodyH * 0.3;
+                const dLHandX = x + w * 0.05 - 5;
+                const dLHandY = dArmY + 4;
+                ctx.beginPath();
+                ctx.moveTo(x + w * 0.05, dArmY);
+                ctx.lineTo(dLHandX, dLHandY);
+                ctx.stroke();
+                const dRHandX = x + w * 0.95 + 5;
+                const dRHandY = dArmY + 4;
+                ctx.beginPath();
+                ctx.moveTo(x + w * 0.95, dArmY);
+                ctx.lineTo(dRHandX, dRHandY);
+                ctx.stroke();
+                // Manos
+                ctx.fillStyle = skinC;
+                ctx.beginPath();
+                ctx.arc(dLHandX, dLHandY, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(dRHandX, dRHandY, 2.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Cabeza
                 ctx.fillStyle = skinC;
                 const headR = w * 0.28;
+                const dHeadCX = x + w * 0.85;
+                const dHeadCY = bodyTop + bodyH * 0.3;
                 ctx.beginPath();
-                ctx.arc(x + w * 0.85, bodyTop + bodyH * 0.3, headR, 0, Math.PI * 2);
+                ctx.arc(dHeadCX, dHeadCY, headR, 0, Math.PI * 2);
                 ctx.fill();
 
+                // Orejas ducking
+                const dEarR = headR * 0.18;
+                ctx.beginPath();
+                ctx.arc(dHeadCX - headR, dHeadCY, dEarR, Math.PI * 0.5, Math.PI * 1.5);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(dHeadCX + headR, dHeadCY, dEarR, -Math.PI * 0.5, Math.PI * 0.5);
+                ctx.fill();
+
+                // Pelo diferenciado ducking
                 if (skin.acc !== 'casco' && skin.acc !== 'mascara') {
-                    ctx.fillStyle = player.hairColor || '#F9D853';
-                    ctx.beginPath();
-                    ctx.arc(x + w * 0.85, bodyTop + bodyH * 0.3 - 2, headR, Math.PI, Math.PI * 2);
-                    ctx.fill();
+                    const hColor = player.hairColor || '#F9D853';
+                    ctx.fillStyle = hColor;
+                    if (player.hairStyle === 'rulos') {
+                        const ruloR = headR * 0.25;
+                        const ruloPos = [
+                            [dHeadCX - headR * 0.4, dHeadCY - headR * 0.6],
+                            [dHeadCX, dHeadCY - headR * 0.75],
+                            [dHeadCX + headR * 0.35, dHeadCY - headR * 0.55],
+                            [dHeadCX - headR * 0.15, dHeadCY - headR * 0.7],
+                        ];
+                        ctx.beginPath();
+                        for (const [rx, ry] of ruloPos) {
+                            ctx.moveTo(rx + ruloR, ry);
+                            ctx.arc(rx, ry, ruloR, 0, Math.PI * 2);
+                        }
+                        ctx.fill();
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(dHeadCX, dHeadCY - 2, headR, Math.PI, Math.PI * 2);
+                        ctx.fill();
+                        // Mechón
+                        ctx.beginPath();
+                        ctx.moveTo(dHeadCX + headR * 0.3, dHeadCY - headR);
+                        ctx.quadraticCurveTo(dHeadCX + headR * 0.7, dHeadCY - headR * 1.2, dHeadCX + headR * 0.5, dHeadCY - headR * 0.5);
+                        ctx.fill();
+                    }
                 }
 
-                ctx.fillStyle = skin.acc === 'zombie' ? '#C62828' : '#333';
+                // Cejas ducking (fruncidas)
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1.8;
                 ctx.beginPath();
-                ctx.arc(x + w * 0.87, bodyTop + bodyH * 0.25, 2, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.moveTo(dHeadCX - 2, dHeadCY - 5);
+                ctx.lineTo(dHeadCX + 2, dHeadCY - 4);
+                ctx.stroke();
 
-                drawAccessory(skin, x + w * 0.85, bodyTop + bodyH * 0.3, headR, w, true);
+                // Ojos entrecerrados (líneas)
+                ctx.strokeStyle = skin.acc === 'zombie' ? '#C62828' : '#333';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(dHeadCX - 1, dHeadCY - 1);
+                ctx.lineTo(dHeadCX + 5, dHeadCY - 1);
+                ctx.stroke();
 
+                // Boca de esfuerzo (línea tensa)
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(dHeadCX - 2, dHeadCY + 3);
+                ctx.lineTo(dHeadCX + 4, dHeadCY + 3);
+                ctx.stroke();
+
+                drawAccessory(skin, dHeadCX, dHeadCY, headR, w, true);
+
+                // Piernas ducking
                 ctx.strokeStyle = skinC;
                 ctx.lineWidth = 3.5;
                 ctx.beginPath();
@@ -958,6 +1043,13 @@
             const skinC = skin.skinTint || player.skinColor;
             const yOff = -bob; // torso bounce
 
+            // Inclinación al correr
+            if (grounded) {
+                ctx.translate(x + w / 2, y + h);
+                ctx.rotate(-0.05);
+                ctx.translate(-(x + w / 2), -(y + h));
+            }
+
             if (skin.acc === 'capa') {
                 ctx.fillStyle = skin.accColor;
                 const capaWave = Math.sin(runFrame * 0.2) * 4;
@@ -969,10 +1061,14 @@
                 ctx.fill();
             }
 
-            // Shirt
-            ctx.fillStyle = skin.shirtColor;
+            // Cuello
             const bodyTop = y + h * 0.3 + yOff;
             const bodyH = h * 0.35;
+            ctx.fillStyle = skinC;
+            ctx.fillRect(x + w / 2 - 4, bodyTop - 4, 8, 8);
+
+            // Shirt
+            ctx.fillStyle = skin.shirtColor;
             ctx.fillRect(x + w * 0.15, bodyTop, w * 0.7, bodyH);
             if (skin.stripe) {
                 ctx.fillStyle = skin.stripe;
@@ -988,29 +1084,103 @@
             ctx.arc(headCX, headCY, headR, 0, Math.PI * 2);
             ctx.fill();
 
+            // Orejas
+            const earR = headR * 0.2;
+            ctx.fillStyle = skinC;
+            ctx.beginPath();
+            ctx.arc(headCX - headR, headCY, earR, Math.PI * 0.5, Math.PI * 1.5);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(headCX + headR, headCY, earR, -Math.PI * 0.5, Math.PI * 0.5);
+            ctx.fill();
+
+            // Pelo diferenciado
             if (skin.acc !== 'casco' && skin.acc !== 'mascara') {
-                ctx.fillStyle = player.hairColor || '#F9D853';
+                const hColor = player.hairColor || '#F9D853';
+                ctx.fillStyle = hColor;
+                if (player.hairStyle === 'rulos') {
+                    // Rulos: circulitos superpuestos en la corona
+                    const ruloR = headR * 0.28;
+                    const ruloPositions = [
+                        [headCX - headR * 0.55, headCY - headR * 0.65],
+                        [headCX - headR * 0.15, headCY - headR * 0.85],
+                        [headCX + headR * 0.25, headCY - headR * 0.8],
+                        [headCX + headR * 0.6, headCY - headR * 0.55],
+                        [headCX - headR * 0.35, headCY - headR * 0.8],
+                    ];
+                    ctx.beginPath();
+                    for (const [rx, ry] of ruloPositions) {
+                        ctx.moveTo(rx + ruloR, ry);
+                        ctx.arc(rx, ry, ruloR, 0, Math.PI * 2);
+                    }
+                    ctx.fill();
+                } else {
+                    // Corto: semicírculo + mechón al frente
+                    ctx.beginPath();
+                    ctx.arc(headCX, headCY - 3, headR, Math.PI, Math.PI * 2);
+                    ctx.fill();
+                    // Mechón
+                    ctx.beginPath();
+                    ctx.moveTo(headCX + headR * 0.3, headCY - headR);
+                    ctx.quadraticCurveTo(headCX + headR * 0.7, headCY - headR * 1.3, headCX + headR * 0.5, headCY - headR * 0.5);
+                    ctx.fill();
+                }
+
+                // Pelo con viento (líneas curvas desde atrás)
+                if (grounded) {
+                    ctx.strokeStyle = hColor;
+                    ctx.lineWidth = 1.5;
+                    for (let i = 0; i < 3; i++) {
+                        const windWave = Math.sin(runFrame * 0.3 + i) * 3;
+                        const startY = headCY - headR * 0.5 + i * headR * 0.25;
+                        ctx.beginPath();
+                        ctx.moveTo(headCX - headR * 0.8, startY);
+                        ctx.quadraticCurveTo(headCX - headR * 1.2, startY + windWave, headCX - headR * 1.4 - i * 2, startY + windWave * 1.5);
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Cejas
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(headCX - 6, headCY - 5);
+            ctx.lineTo(headCX - 2, headCY - 6);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(headCX + 2, headCY - 6);
+            ctx.lineTo(headCX + 6, headCY - 5);
+            ctx.stroke();
+
+            // Ojos - expresiones según estado
+            ctx.fillStyle = skin.id === 'zombie' ? '#C62828' : '#333';
+            if (!grounded) {
+                // Saltando: ojos grandes de sorpresa
                 ctx.beginPath();
-                ctx.arc(headCX, headCY - 3, headR, Math.PI, Math.PI * 2);
+                ctx.arc(headCX - 4, headCY - 1, 3.2, 0, Math.PI * 2);
+                ctx.arc(headCX + 4, headCY - 1, 3.2, 0, Math.PI * 2);
                 ctx.fill();
-                ctx.fillStyle = '#E6C430';
+            } else {
+                // Normal
                 ctx.beginPath();
-                ctx.arc(headCX - headR * 0.5, headCY - headR * 0.6, headR * 0.3, 0, Math.PI * 2);
-                ctx.arc(headCX + headR * 0.5, headCY - headR * 0.7, headR * 0.25, 0, Math.PI * 2);
+                ctx.arc(headCX - 4, headCY - 1, 2.5, 0, Math.PI * 2);
+                ctx.arc(headCX + 4, headCY - 1, 2.5, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            ctx.fillStyle = skin.id === 'zombie' ? '#C62828' : '#333';
-            ctx.beginPath();
-            ctx.arc(headCX - 4, headCY - 1, 2.5, 0, Math.PI * 2);
-            ctx.arc(headCX + 4, headCY - 1, 2.5, 0, Math.PI * 2);
-            ctx.fill();
-
+            // Boca - expresiones según estado
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             if (skin.id === 'zombie') {
                 ctx.arc(headCX, headCY + 3, 4, 0, Math.PI);
+            } else if (!grounded) {
+                // Saltando: boca "O" abierta
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(headCX, headCY + 4, 3, 0, Math.PI * 2);
+                ctx.fill();
             } else {
                 ctx.arc(headCX, headCY + 3, 5, 0.1 * Math.PI, 0.9 * Math.PI);
             }
@@ -1056,14 +1226,27 @@
             ctx.strokeStyle = skinC;
             ctx.lineWidth = 3.5;
             const armY = bodyTop + 5;
+            const lHandX = x + w * 0.15 + armAnim * 10 - 5;
+            const lHandY = armY + h * 0.2;
             ctx.beginPath();
             ctx.moveTo(x + w * 0.15, armY);
-            ctx.lineTo(x + w * 0.15 + armAnim * 10 - 5, armY + h * 0.2);
+            ctx.lineTo(lHandX, lHandY);
             ctx.stroke();
+            const rHandX = x + w * 0.85 - armAnim * 10 + 5;
+            const rHandY = armY + h * 0.2;
             ctx.beginPath();
             ctx.moveTo(x + w * 0.85, armY);
-            ctx.lineTo(x + w * 0.85 - armAnim * 10 + 5, armY + h * 0.2);
+            ctx.lineTo(rHandX, rHandY);
             ctx.stroke();
+
+            // Manos
+            ctx.fillStyle = skinC;
+            ctx.beginPath();
+            ctx.arc(lHandX, lHandY, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(rHandX, rHandY, 3, 0, Math.PI * 2);
+            ctx.fill();
 
             // Number
             ctx.fillStyle = skin.stripe ? skin.shirtColor : '#fff';
