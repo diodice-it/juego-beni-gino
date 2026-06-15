@@ -1,0 +1,1402 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carrera Beni vs Gino</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 800px;
+            height: auto;
+            touch-action: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="game"></canvas>
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 400;
+
+        // --- ESCENARIOS (cambian automáticamente cada X metros) ---
+        const SCENE_CHANGE_DIST = 1000; // cada 1000m cambia el escenario
+        const scenes = [
+            { name: 'Bosque', sky1: '#87CEEB', sky2: '#E1F5FE', ground: '#8BC34A', groundLine: '#689F38', grass: '#7CB342', mountain: '#66BB6A', treeTrunk: '#6D4C41', treeLeaf1: '#388E3C', treeLeaf2: '#2E7D32', isCity: false },
+            { name: 'Desierto', sky1: '#FF8F00', sky2: '#FFF8E1', ground: '#F4D03F', groundLine: '#D4AC0D', grass: '#E8C52A', mountain: '#E0A830', treeTrunk: '#A1887F', treeLeaf1: '#8BC34A', treeLeaf2: '#689F38', isCity: false },
+            { name: 'Nieve', sky1: '#B3E5FC', sky2: '#E3F2FD', ground: '#ECEFF1', groundLine: '#CFD8DC', grass: '#B0BEC5', mountain: '#fff', treeTrunk: '#5D4037', treeLeaf1: '#2196F3', treeLeaf2: '#1565C0', isCity: false },
+            { name: 'Ciudad', sky1: '#455A64', sky2: '#90A4AE', ground: '#616161', groundLine: '#424242', grass: '#757575', mountain: '#78909C', treeTrunk: '#9E9E9E', treeLeaf1: '#78909C', treeLeaf2: '#607D8B', isCity: true },
+            { name: 'Espacio', sky1: '#0D0221', sky2: '#1A0533', ground: '#4A148C', groundLine: '#6A1B9A', grass: '#7B1FA2', mountain: '#311B92', treeTrunk: '#CE93D8', treeLeaf1: '#E040FB', treeLeaf2: '#AA00FF', isCity: false, isSpace: true },
+        ];
+        const BASE_SPEED = 8;
+        const SPEED_INCREMENT = 0.4; // cada 500m sube la velocidad
+
+        // --- SKINS ---
+        const skins = [
+            { id: 'boca', label: 'Boca', shirtColor: '#003DA5', shortsColor: '#003DA5', shoeColor: '#FFD200', acc: 'vincha', accColor: '#FFD200', stripe: '#FFD200' },
+            { id: 'huracan', label: 'Huracán', shirtColor: '#FFFFFF', shortsColor: '#CE1126', shoeColor: '#fff', acc: 'vincha', accColor: '#CE1126', stripe: '#CE1126' },
+            { id: 'superhero', label: 'Superhéroe', shirtColor: '#D32F2F', shortsColor: '#1565C0', shoeColor: '#FFD54F', acc: 'capa', accColor: '#D32F2F' },
+            { id: 'ninja', label: 'Ninja', shirtColor: '#212121', shortsColor: '#212121', shoeColor: '#333', acc: 'mascara', accColor: '#212121' },
+            { id: 'astro', label: 'Astronauta', shirtColor: '#ECEFF1', shortsColor: '#B0BEC5', shoeColor: '#78909C', acc: 'casco', accColor: '#E0E0E0' },
+            { id: 'zombie', label: 'Zombie', shirtColor: '#558B2F', shortsColor: '#33691E', shoeColor: '#4E342E', acc: 'herida', accColor: '#C62828', skinTint: '#A5D6A7' },
+            { id: 'rey', label: 'Rey', shirtColor: '#7B1FA2', shortsColor: '#4A148C', shoeColor: '#FFD54F', acc: 'corona', accColor: '#FFD54F' },
+            { id: 'rockero', label: 'Rockero', shirtColor: '#212121', shortsColor: '#424242', shoeColor: '#E53935', acc: 'lentes', accColor: '#212121' },
+        ];
+
+        // --- JUGADORES ---
+        const players = [
+            { name: 'GINO', color: '#003DA5', skinColor: '#FFCC80', hairColor: '#F9D853', height: 60, width: 35, best: null, skin: skins[0] },
+            { name: 'BENI', color: '#CE1126', skinColor: '#FFCC80', hairColor: '#F9D853', height: 48, width: 30, best: null, skin: skins[1] }
+        ];
+
+        const GRAVITY = 0.8;
+        const JUMP_FORCE = -14;
+        const DUCK_HEIGHT_RATIO = 0.5;
+
+        let currentPlayer = 0;
+        let state = 'menu'; // menu, skinSelect, playing, dead, finished, results
+        let skinSelectPlayer = 0;
+        let skinHover = -1;
+        let game = {};
+        let frameCount = 0;
+        let particles = [];
+        let keysDown = {};
+        let deadTimer = 0;
+
+        // --- PARTÍCULAS ---
+        function addParticle(x, y, vx, vy, life, size, color) {
+            particles.push({ x, y, vx, vy, life, maxLife: life, size, color: color || null });
+        }
+
+        function updateParticles() {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx; p.y += p.vy; p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                const alpha = p.life / p.maxLife;
+                ctx.fillStyle = p.color ? p.color.replace(')', `,${alpha * 0.7})`).replace('rgb', 'rgba') : `rgba(200,180,150,${alpha * 0.6})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        // --- JUEGO ---
+        function initRun() {
+            const p = players[currentPlayer];
+            const groundY = 320;
+            game = {
+                runner: {
+                    x: 80, y: groundY - p.height,
+                    w: p.width, h: p.height,
+                    normalH: p.height,
+                    vy: 0, grounded: true,
+                    ducking: false,
+                    distance: 0,
+                    speed: BASE_SPEED,
+                    runFrame: 0, alive: true
+                },
+                obstacles: [],
+                groundY, bgOffset: 0,
+                nextObstacle: 70,
+                clouds: [], trees: [],
+                currentScene: 0,
+                lastSceneChange: 0
+            };
+            particles = [];
+            generateScenery();
+            frameCount = 0;
+        }
+
+        function generateScenery() {
+            game.clouds = [];
+            game.trees = [];
+            for (let i = 0; i < 8; i++) {
+                game.clouds.push({ x: Math.random() * 900, y: 30 + Math.random() * 80, w: 60 + Math.random() * 80, speed: 0.3 + Math.random() * 0.5 });
+            }
+            for (let i = 0; i < 12; i++) {
+                game.trees.push({ x: Math.random() * 900, h: 40 + Math.random() * 50 });
+            }
+        }
+
+        function currentScene() {
+            return scenes[game.currentScene % scenes.length];
+        }
+
+        function spawnObstacle() {
+            const scene = currentScene();
+            const sceneName = scene.name;
+            const rand = Math.random();
+            let type, w, h, elevated = false;
+
+            // Obstáculos contextuales por escenario
+            if (sceneName === 'Bosque') {
+                if (rand < 0.35) { type = 'rock'; w = 30; h = 25; }
+                else if (rand < 0.65) { type = 'tronco'; w = 40; h = 30; }
+                else if (rand < 0.8) { type = 'hongo'; w = 22; h = 35; }
+                else { type = 'bird'; w = 40; h = 25; elevated = true; }
+            } else if (sceneName === 'Desierto') {
+                if (rand < 0.4) { type = 'cactus'; w = 20; h = 45; }
+                else if (rand < 0.7) { type = 'rock'; w = 30; h = 25; }
+                else if (rand < 0.85) { type = 'serpiente'; w = 35; h = 15; }
+                else { type = 'buitre'; w = 42; h = 25; elevated = true; }
+            } else if (sceneName === 'Nieve') {
+                if (rand < 0.35) { type = 'hielo'; w = 35; h = 28; }
+                else if (rand < 0.6) { type = 'snowman'; w = 28; h = 45; }
+                else if (rand < 0.8) { type = 'rock'; w = 30; h = 25; }
+                else { type = 'bird'; w = 40; h = 25; elevated = true; }
+            } else if (sceneName === 'Ciudad') {
+                if (rand < 0.35) { type = 'auto'; w = 50; h = 30; }
+                else if (rand < 0.6) { type = 'cono'; w = 18; h = 30; }
+                else if (rand < 0.8) { type = 'box'; w = 35; h = 35; }
+                else { type = 'cartel'; w = 45; h = 22; elevated = true; }
+            } else { // Espacio
+                if (rand < 0.35) { type = 'meteorito'; w = 32; h = 30; }
+                else if (rand < 0.6) { type = 'alien'; w = 28; h = 40; }
+                else if (rand < 0.8) { type = 'cristal'; w = 20; h = 45; }
+                else { type = 'satelite'; w = 45; h = 22; elevated = true; }
+            }
+
+            const p = players[currentPlayer];
+            let y;
+            if (elevated) {
+                y = game.groundY - p.height + 5;
+            } else {
+                y = game.groundY - h;
+            }
+
+            game.obstacles.push({ x: 850, y, w, h, type, elevated, wingFrame: 0 });
+        }
+
+        function update() {
+            if (state === 'dead') {
+                deadTimer++;
+                updateParticles();
+                if (deadTimer > 120) {
+                    recordResult();
+                }
+                return;
+            }
+            if (state !== 'playing') return;
+
+            const r = game.runner;
+            const p = players[currentPlayer];
+            frameCount++;
+            r.runFrame++;
+
+            // Agacharse
+            if (keysDown['ArrowDown'] || keysDown['KeyS']) {
+                if (!r.ducking && r.grounded) {
+                    r.ducking = true;
+                    r.h = Math.floor(r.normalH * DUCK_HEIGHT_RATIO);
+                    r.y = game.groundY - r.h;
+                }
+            } else {
+                if (r.ducking) {
+                    r.ducking = false;
+                    r.h = r.normalH;
+                    r.y = game.groundY - r.h;
+                }
+            }
+
+            // Velocidad aumenta infinitamente
+            r.speed = BASE_SPEED + Math.floor(r.distance / 500) * SPEED_INCREMENT;
+            r.distance += r.speed * 0.5;
+
+            // Cambiar escenario automáticamente cada SCENE_CHANGE_DIST metros
+            const newScene = Math.floor(r.distance / SCENE_CHANGE_DIST) % scenes.length;
+            if (newScene !== game.currentScene) {
+                game.currentScene = newScene;
+                // Regenerar árboles para el nuevo escenario
+                generateScenery();
+            }
+
+            // Gravedad
+            if (!r.grounded) {
+                r.vy += GRAVITY;
+                r.y += r.vy;
+                if (r.y >= game.groundY - r.h) {
+                    r.y = game.groundY - r.h;
+                    r.vy = 0;
+                    r.grounded = true;
+                    for (let i = 0; i < 5; i++) addParticle(r.x + r.w / 2, game.groundY, -Math.random() * 2 - 1, -Math.random() * 2, 20, Math.random() * 4 + 2);
+                }
+            }
+
+            // Polvo
+            if (r.grounded && frameCount % 6 === 0) addParticle(r.x, game.groundY, -Math.random() * 2 - 1, -Math.random() * 2, 20, Math.random() * 4 + 2);
+
+            // Fondo
+            game.bgOffset = (game.bgOffset + r.speed) % 900;
+            game.clouds.forEach(c => { c.x -= c.speed; if (c.x + c.w < 0) c.x = 850; });
+            game.trees.forEach(t => { t.x -= r.speed * 0.3; if (t.x < -40) t.x = 850 + Math.random() * 100; });
+
+            // Obstáculos (más frecuentes cuanto más rápido)
+            game.nextObstacle--;
+            const obstacleRate = Math.max(40, 90 - Math.floor(r.distance / 500) * 3);
+            if (game.nextObstacle <= 0) {
+                spawnObstacle();
+                game.nextObstacle = obstacleRate + Math.floor(Math.random() * 35);
+            }
+
+            for (let i = game.obstacles.length - 1; i >= 0; i--) {
+                const o = game.obstacles[i];
+                o.x -= r.speed;
+                if (o.wingFrame !== undefined) o.wingFrame++;
+                if (o.x + o.w < 0) { game.obstacles.splice(i, 1); continue; }
+
+                // Colisión
+                const margin = 6;
+                if (r.x + r.w - margin > o.x && r.x + margin < o.x + o.w &&
+                    r.y + r.h > o.y + margin && r.y < o.y + o.h - margin) {
+                    r.alive = false;
+                    state = 'dead';
+                    deadTimer = 0;
+                    for (let j = 0; j < 20; j++) {
+                        addParticle(r.x + r.w / 2, r.y + r.h / 2, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, 30, Math.random() * 6 + 2, 'rgb(255,80,80)');
+                    }
+                    return;
+                }
+            }
+
+            updateParticles();
+        }
+
+        function recordResult() {
+            const r = game.runner;
+            players[currentPlayer].best = {
+                distance: Math.floor(r.distance),
+                scene: currentScene().name
+            };
+            if (currentPlayer === 0) {
+                state = 'finished';
+            } else {
+                state = 'results';
+            }
+        }
+
+        // --- ACCESORIOS ---
+        function drawAccessory(skin, headCX, headCY, headR, w, isDucking) {
+            const acc = skin.acc;
+            if (!acc) return;
+
+            if (acc === 'corona') {
+                ctx.fillStyle = skin.accColor;
+                const crownY = headCY - headR - 4;
+                ctx.beginPath();
+                ctx.moveTo(headCX - 8, crownY + 8);
+                ctx.lineTo(headCX - 8, crownY);
+                ctx.lineTo(headCX - 4, crownY + 4);
+                ctx.lineTo(headCX, crownY - 2);
+                ctx.lineTo(headCX + 4, crownY + 4);
+                ctx.lineTo(headCX + 8, crownY);
+                ctx.lineTo(headCX + 8, crownY + 8);
+                ctx.closePath();
+                ctx.fill();
+                // Gemas
+                ctx.fillStyle = '#E53935';
+                ctx.beginPath();
+                ctx.arc(headCX, crownY + 3, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (acc === 'vincha') {
+                ctx.strokeStyle = skin.accColor;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(headCX, headCY - 2, headR + 1, Math.PI * 1.1, Math.PI * 1.9);
+                ctx.stroke();
+            }
+
+            if (acc === 'lentes') {
+                ctx.fillStyle = skin.accColor;
+                // Marco
+                ctx.fillRect(headCX - headR * 0.8, headCY - 4, headR * 1.6, 3);
+                // Lente izq
+                ctx.fillRect(headCX - headR * 0.75, headCY - 4, headR * 0.65, 8);
+                // Lente der
+                ctx.fillRect(headCX + headR * 0.1, headCY - 4, headR * 0.65, 8);
+                // Reflejo
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.fillRect(headCX - headR * 0.65, headCY - 2, 3, 3);
+                ctx.fillRect(headCX + headR * 0.2, headCY - 2, 3, 3);
+            }
+
+            if (acc === 'casco') {
+                // Casco de astronauta
+                ctx.strokeStyle = skin.accColor;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(headCX, headCY, headR + 4, 0, Math.PI * 2);
+                ctx.stroke();
+                // Visor
+                ctx.fillStyle = 'rgba(100,181,246,0.4)';
+                ctx.beginPath();
+                ctx.arc(headCX, headCY, headR + 2, 0, Math.PI * 2);
+                ctx.fill();
+                // Reflejo
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.arc(headCX - 3, headCY - 3, headR * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (acc === 'mascara') {
+                // Máscara ninja
+                ctx.fillStyle = skin.accColor;
+                ctx.fillRect(headCX - headR, headCY - 4, headR * 2, 8);
+                // Solo se ven los ojos (se dibujan encima)
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.ellipse(headCX - 4, headCY - 1, 3.5, 2, -0.2, 0, Math.PI * 2);
+                ctx.ellipse(headCX + 4, headCY - 1, 3.5, 2, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(headCX - 4, headCY - 1, 1.5, 0, Math.PI * 2);
+                ctx.arc(headCX + 4, headCY - 1, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                // Cubre cabeza
+                ctx.fillStyle = skin.accColor;
+                ctx.beginPath();
+                ctx.arc(headCX, headCY - 2, headR, Math.PI, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (acc === 'herida') {
+                // Heridas zombie
+                ctx.strokeStyle = skin.accColor;
+                ctx.lineWidth = 1.5;
+                // Cicatriz en mejilla
+                ctx.beginPath();
+                ctx.moveTo(headCX + 3, headCY + 1);
+                ctx.lineTo(headCX + 7, headCY + 5);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(headCX + 5, headCY);
+                ctx.lineTo(headCX + 5, headCY + 6);
+                ctx.stroke();
+            }
+        }
+
+        // --- DIBUJO PERSONAJE ---
+        function drawRunner(x, y, w, h, player, invincible, grounded, runFrame, ducking) {
+            if (invincible > 0 && Math.floor(invincible / 4) % 2 === 0) return;
+
+            const skin = player.skin || skins[0];
+            const legAnim = grounded ? Math.sin(runFrame * 0.3) : 0.5;
+            const armAnim = grounded ? Math.sin(runFrame * 0.3 + Math.PI) : -0.3;
+
+            ctx.save();
+
+            if (ducking) {
+                // Agachado: cuerpo horizontal
+                const bodyTop = y + h * 0.1;
+                const bodyH = h * 0.5;
+
+                // Capa (detrás)
+                if (skin.acc === 'capa') {
+                    ctx.fillStyle = skin.accColor;
+                    ctx.beginPath();
+                    ctx.moveTo(x + w * 0.1, bodyTop);
+                    ctx.lineTo(x - 10, bodyTop + bodyH + 10);
+                    ctx.lineTo(x + w * 0.3, bodyTop + bodyH);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Remera
+                ctx.fillStyle = skin.shirtColor;
+                ctx.fillRect(x + w * 0.05, bodyTop, w * 0.9, bodyH);
+                // Franja en remera
+                if (skin.stripe) {
+                    ctx.fillStyle = skin.stripe;
+                    ctx.fillRect(x + w * 0.05, bodyTop + bodyH * 0.35, w * 0.9, bodyH * 0.3);
+                }
+
+                // Cabeza
+                const skinC = skin.skinTint || player.skinColor;
+                ctx.fillStyle = skinC;
+                const headR = w * 0.28;
+                ctx.beginPath();
+                ctx.arc(x + w * 0.85, bodyTop + bodyH * 0.3, headR, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pelo rubio
+                if (skin.acc !== 'casco' && skin.acc !== 'mascara') {
+                    ctx.fillStyle = player.hairColor || '#F9D853';
+                    ctx.beginPath();
+                    ctx.arc(x + w * 0.85, bodyTop + bodyH * 0.3 - 2, headR, Math.PI, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // Ojos
+                ctx.fillStyle = skin.acc === 'zombie' ? '#C62828' : '#333';
+                ctx.beginPath();
+                ctx.arc(x + w * 0.87, bodyTop + bodyH * 0.25, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Accesorios agachado
+                const dHeadX = x + w * 0.85;
+                const dHeadY = bodyTop + bodyH * 0.3;
+                drawAccessory(skin, dHeadX, dHeadY, headR, w, true);
+
+                // Piernas
+                ctx.strokeStyle = skinC;
+                ctx.lineWidth = 3.5;
+                ctx.beginPath();
+                ctx.moveTo(x + w * 0.15, bodyTop + bodyH);
+                ctx.lineTo(x + w * 0.1, bodyTop + bodyH + h * 0.35);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(x + w * 0.35, bodyTop + bodyH);
+                ctx.lineTo(x + w * 0.3, bodyTop + bodyH + h * 0.35);
+                ctx.stroke();
+
+                // Zapatillas
+                ctx.fillStyle = skin.shoeColor;
+                ctx.fillRect(x + w * 0.05, bodyTop + bodyH + h * 0.32, 9, 4);
+                ctx.fillRect(x + w * 0.25, bodyTop + bodyH + h * 0.32, 9, 4);
+
+                ctx.restore();
+                return;
+            }
+
+            // --- Normal (parado/corriendo) ---
+            const skinC = skin.skinTint || player.skinColor;
+
+            // Capa (detrás del cuerpo)
+            if (skin.acc === 'capa') {
+                ctx.fillStyle = skin.accColor;
+                const capaWave = Math.sin(runFrame * 0.2) * 4;
+                ctx.beginPath();
+                ctx.moveTo(x + w * 0.2, y + h * 0.32);
+                ctx.lineTo(x - 8 + capaWave, y + h * 0.85);
+                ctx.lineTo(x + w * 0.5, y + h * 0.75);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Remera
+            ctx.fillStyle = skin.shirtColor;
+            const bodyTop = y + h * 0.3;
+            const bodyH = h * 0.35;
+            ctx.fillRect(x + w * 0.15, bodyTop, w * 0.7, bodyH);
+            // Franja (Boca/Huracán)
+            if (skin.stripe) {
+                ctx.fillStyle = skin.stripe;
+                ctx.fillRect(x + w * 0.15, bodyTop + bodyH * 0.35, w * 0.7, bodyH * 0.3);
+            }
+
+            // Cabeza
+            ctx.fillStyle = skinC;
+            const headR = w * 0.32;
+            const headCX = x + w / 2;
+            const headCY = y + headR;
+            ctx.beginPath();
+            ctx.arc(headCX, headCY, headR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pelo rubio (no si tiene casco o máscara)
+            if (skin.acc !== 'casco' && skin.acc !== 'mascara') {
+                ctx.fillStyle = player.hairColor || '#F9D853';
+                ctx.beginPath();
+                ctx.arc(headCX, headCY - 3, headR, Math.PI, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#E6C430';
+                ctx.beginPath();
+                ctx.arc(headCX - headR * 0.5, headCY - headR * 0.6, headR * 0.3, 0, Math.PI * 2);
+                ctx.arc(headCX + headR * 0.5, headCY - headR * 0.7, headR * 0.25, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Ojos
+            ctx.fillStyle = skin.id === 'zombie' ? '#C62828' : '#333';
+            ctx.beginPath();
+            ctx.arc(headCX - 4, headCY - 1, 2.5, 0, Math.PI * 2);
+            ctx.arc(headCX + 4, headCY - 1, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sonrisa
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            if (skin.id === 'zombie') {
+                // Boca abierta zombie
+                ctx.arc(headCX, headCY + 3, 4, 0, Math.PI);
+            } else {
+                ctx.arc(headCX, headCY + 3, 5, 0.1 * Math.PI, 0.9 * Math.PI);
+            }
+            ctx.stroke();
+
+            // Accesorios en cabeza
+            drawAccessory(skin, headCX, headCY, headR, w, false);
+
+            // Shorts
+            ctx.fillStyle = skin.shortsColor;
+            const shortsTop = bodyTop + bodyH;
+            ctx.fillRect(x + w * 0.2, shortsTop, w * 0.6, h * 0.12);
+
+            // Piernas
+            ctx.strokeStyle = skinC;
+            ctx.lineWidth = 4;
+            const legStart = shortsTop + h * 0.12;
+            const legLen = h * 0.22;
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.35, legStart);
+            ctx.lineTo(x + w * 0.35 + legAnim * 8, legStart + legLen);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.65, legStart);
+            ctx.lineTo(x + w * 0.65 - legAnim * 8, legStart + legLen);
+            ctx.stroke();
+
+            // Zapatillas
+            ctx.fillStyle = skin.shoeColor;
+            ctx.fillRect(x + w * 0.35 + legAnim * 8 - 4, legStart + legLen - 2, 10, 5);
+            ctx.fillRect(x + w * 0.65 - legAnim * 8 - 4, legStart + legLen - 2, 10, 5);
+
+            // Brazos
+            ctx.strokeStyle = skinC;
+            ctx.lineWidth = 3.5;
+            const armY = bodyTop + 5;
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.15, armY);
+            ctx.lineTo(x + w * 0.15 + armAnim * 10 - 5, armY + h * 0.2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x + w * 0.85, armY);
+            ctx.lineTo(x + w * 0.85 - armAnim * 10 + 5, armY + h * 0.2);
+            ctx.stroke();
+
+            // Número en remera
+            ctx.fillStyle = skin.stripe ? skin.shirtColor : '#fff';
+            ctx.font = `bold ${Math.floor(h * 0.16)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText(player.name === 'GINO' ? '10' : '7', x + w / 2, bodyTop + bodyH * 0.7);
+
+            ctx.restore();
+        }
+
+        function drawFlyingWarning(o) {
+            ctx.strokeStyle = 'rgba(255,50,50,0.3)';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(o.x, o.y + o.h);
+            ctx.lineTo(o.x + o.w, o.y + o.h);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        function drawBirdShape(o, bodyColor, wingColor) {
+            const wingY = Math.sin(o.wingFrame * 0.3) * 6;
+            ctx.fillStyle = bodyColor;
+            ctx.beginPath();
+            ctx.ellipse(o.x + o.w / 2, o.y + o.h / 2, o.w * 0.3, o.h * 0.35, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = wingColor;
+            ctx.beginPath();
+            ctx.moveTo(o.x + o.w * 0.3, o.y + o.h * 0.4);
+            ctx.lineTo(o.x - 5, o.y + wingY);
+            ctx.lineTo(o.x + o.w * 0.2, o.y + o.h * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(o.x + o.w * 0.7, o.y + o.h * 0.4);
+            ctx.lineTo(o.x + o.w + 5, o.y + wingY);
+            ctx.lineTo(o.x + o.w * 0.8, o.y + o.h * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(o.x + o.w * 0.55, o.y + o.h * 0.4, 2.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#333';
+            ctx.beginPath();
+            ctx.arc(o.x + o.w * 0.57, o.y + o.h * 0.4, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawObstacle(o) {
+            const t = o.type;
+
+            // --- SUELO ---
+            if (t === 'rock') {
+                ctx.fillStyle = '#78909C';
+                ctx.beginPath();
+                ctx.moveTo(o.x, o.y + o.h); ctx.lineTo(o.x + o.w * 0.2, o.y);
+                ctx.lineTo(o.x + o.w * 0.8, o.y + o.h * 0.1); ctx.lineTo(o.x + o.w, o.y + o.h);
+                ctx.closePath(); ctx.fill();
+            } else if (t === 'cactus') {
+                ctx.fillStyle = '#66BB6A';
+                ctx.fillRect(o.x + o.w * 0.3, o.y, o.w * 0.4, o.h);
+                ctx.fillRect(o.x, o.y + o.h * 0.25, o.w * 0.3, o.w * 0.35);
+                ctx.fillRect(o.x + o.w * 0.7, o.y + o.h * 0.4, o.w * 0.3, o.w * 0.35);
+                ctx.fillStyle = '#43A047';
+                ctx.fillRect(o.x + o.w * 0.4, o.y, o.w * 0.1, o.h);
+            } else if (t === 'tronco') {
+                ctx.fillStyle = '#6D4C41';
+                ctx.fillRect(o.x, o.y + o.h * 0.3, o.w, o.h * 0.5);
+                ctx.fillStyle = '#5D4037';
+                ctx.beginPath();
+                ctx.ellipse(o.x + o.w, o.y + o.h * 0.55, o.h * 0.35, o.h * 0.35, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#8D6E63';
+                ctx.beginPath();
+                ctx.ellipse(o.x + o.w, o.y + o.h * 0.55, o.h * 0.2, o.h * 0.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (t === 'hongo') {
+                ctx.fillStyle = '#BCAAA4';
+                ctx.fillRect(o.x + o.w * 0.35, o.y + o.h * 0.4, o.w * 0.3, o.h * 0.6);
+                ctx.fillStyle = '#E53935';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w / 2, o.y + o.h * 0.4, o.w * 0.5, Math.PI, 0);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.35, o.y + o.h * 0.25, 3, 0, Math.PI * 2);
+                ctx.arc(o.x + o.w * 0.65, o.y + o.h * 0.3, 2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (t === 'serpiente') {
+                ctx.strokeStyle = '#F9A825';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(o.x, o.y + o.h);
+                for (let sx = 0; sx < o.w; sx += 8) {
+                    ctx.lineTo(o.x + sx, o.y + o.h - Math.sin(sx * 0.4) * 8);
+                }
+                ctx.stroke();
+                // Cabeza
+                ctx.fillStyle = '#F57F17';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w, o.y + o.h * 0.3, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w + 2, o.y + o.h * 0.25, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (t === 'hielo') {
+                ctx.fillStyle = '#B3E5FC';
+                ctx.beginPath();
+                ctx.moveTo(o.x, o.y + o.h); ctx.lineTo(o.x + o.w * 0.3, o.y);
+                ctx.lineTo(o.x + o.w * 0.7, o.y + o.h * 0.15);
+                ctx.lineTo(o.x + o.w, o.y + o.h);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.3, o.y);
+                ctx.lineTo(o.x + o.w * 0.4, o.y + o.h * 0.5);
+                ctx.lineTo(o.x + o.w * 0.2, o.y + o.h * 0.4);
+                ctx.closePath(); ctx.fill();
+            } else if (t === 'snowman') {
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w / 2, o.y + o.h * 0.75, o.w * 0.45, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath();
+                ctx.arc(o.x + o.w / 2, o.y + o.h * 0.4, o.w * 0.35, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath();
+                ctx.arc(o.x + o.w / 2, o.y + o.h * 0.15, o.w * 0.25, 0, Math.PI * 2); ctx.fill();
+                // Ojos y nariz
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.4, o.y + o.h * 0.12, 1.5, 0, Math.PI * 2);
+                ctx.arc(o.x + o.w * 0.6, o.y + o.h * 0.12, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FF9800';
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.5, o.y + o.h * 0.15);
+                ctx.lineTo(o.x + o.w * 0.7, o.y + o.h * 0.17);
+                ctx.lineTo(o.x + o.w * 0.5, o.y + o.h * 0.19);
+                ctx.closePath(); ctx.fill();
+            } else if (t === 'auto') {
+                // Cuerpo auto
+                ctx.fillStyle = '#E53935';
+                ctx.fillRect(o.x + 5, o.y + o.h * 0.3, o.w - 10, o.h * 0.5);
+                // Techo
+                ctx.fillStyle = '#C62828';
+                ctx.fillRect(o.x + 12, o.y, o.w * 0.5, o.h * 0.4);
+                // Ventanas
+                ctx.fillStyle = '#90CAF9';
+                ctx.fillRect(o.x + 14, o.y + 3, o.w * 0.2, o.h * 0.25);
+                ctx.fillRect(o.x + 14 + o.w * 0.22, o.y + 3, o.w * 0.2, o.h * 0.25);
+                // Ruedas
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(o.x + 12, o.y + o.h, 5, 0, Math.PI * 2);
+                ctx.arc(o.x + o.w - 12, o.y + o.h, 5, 0, Math.PI * 2);
+                ctx.fill();
+                // Luces
+                ctx.fillStyle = '#FFD54F';
+                ctx.fillRect(o.x + o.w - 6, o.y + o.h * 0.4, 4, 5);
+            } else if (t === 'cono') {
+                ctx.fillStyle = '#FF6D00';
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w / 2, o.y);
+                ctx.lineTo(o.x, o.y + o.h);
+                ctx.lineTo(o.x + o.w, o.y + o.h);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(o.x + 2, o.y + o.h * 0.4, o.w - 4, 4);
+                ctx.fillRect(o.x + 4, o.y + o.h * 0.65, o.w - 8, 3);
+            } else if (t === 'box') {
+                ctx.fillStyle = '#8D6E63';
+                ctx.fillRect(o.x, o.y, o.w, o.h);
+                ctx.fillStyle = '#6D4C41';
+                ctx.fillRect(o.x + 2, o.y + 2, o.w - 4, 3);
+                ctx.fillRect(o.x + 2, o.y + o.h - 5, o.w - 4, 3);
+            } else if (t === 'meteorito') {
+                ctx.fillStyle = '#795548';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w / 2, o.y + o.h / 2, o.w * 0.45, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FF6D00';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.3, o.y + o.h * 0.3, 4, 0, Math.PI * 2);
+                ctx.arc(o.x + o.w * 0.65, o.y + o.h * 0.6, 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (t === 'alien') {
+                ctx.fillStyle = '#76FF03';
+                ctx.beginPath();
+                ctx.ellipse(o.x + o.w / 2, o.y + o.h * 0.6, o.w * 0.35, o.h * 0.4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Cabeza
+                ctx.fillStyle = '#69F0AE';
+                ctx.beginPath();
+                ctx.ellipse(o.x + o.w / 2, o.y + o.h * 0.2, o.w * 0.4, o.h * 0.25, 0, 0, Math.PI * 2);
+                ctx.fill();
+                // Ojos grandes
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.ellipse(o.x + o.w * 0.35, o.y + o.h * 0.18, 4, 5, -0.2, 0, Math.PI * 2);
+                ctx.ellipse(o.x + o.w * 0.65, o.y + o.h * 0.18, 4, 5, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (t === 'cristal') {
+                ctx.fillStyle = '#E040FB';
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.5, o.y);
+                ctx.lineTo(o.x + o.w, o.y + o.h * 0.6);
+                ctx.lineTo(o.x + o.w * 0.7, o.y + o.h);
+                ctx.lineTo(o.x + o.w * 0.3, o.y + o.h);
+                ctx.lineTo(o.x, o.y + o.h * 0.6);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.5, o.y);
+                ctx.lineTo(o.x + o.w * 0.6, o.y + o.h * 0.5);
+                ctx.lineTo(o.x + o.w * 0.4, o.y + o.h * 0.4);
+                ctx.closePath(); ctx.fill();
+            }
+
+            // --- VOLADORES (agacharse) ---
+            else if (t === 'bird') {
+                drawBirdShape(o, '#F44336', '#D32F2F');
+                drawFlyingWarning(o);
+            } else if (t === 'buitre') {
+                drawBirdShape(o, '#5D4037', '#3E2723');
+                drawFlyingWarning(o);
+            } else if (t === 'cartel') {
+                ctx.fillStyle = '#FFD54F';
+                ctx.fillRect(o.x, o.y, o.w, o.h);
+                ctx.strokeStyle = '#F57F17';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(o.x, o.y, o.w, o.h);
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('PELIGRO', o.x + o.w / 2, o.y + o.h * 0.65);
+                drawFlyingWarning(o);
+            } else if (t === 'satelite') {
+                ctx.fillStyle = '#B0BEC5';
+                ctx.fillRect(o.x + o.w * 0.3, o.y + o.h * 0.3, o.w * 0.4, o.h * 0.4);
+                // Paneles solares
+                ctx.fillStyle = '#1565C0';
+                ctx.fillRect(o.x, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
+                ctx.fillRect(o.x + o.w * 0.72, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
+                ctx.strokeStyle = '#90A4AE';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(o.x, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
+                ctx.strokeRect(o.x + o.w * 0.72, o.y + o.h * 0.25, o.w * 0.28, o.h * 0.5);
+                // Antena
+                ctx.fillStyle = '#EF5350';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.5, o.y + o.h * 0.2, 3, 0, Math.PI * 2);
+                ctx.fill();
+                drawFlyingWarning(o);
+            }
+        }
+
+        function drawBackground() {
+            const lvl = currentScene();
+            const grad = ctx.createLinearGradient(0, 0, 0, game.groundY);
+            grad.addColorStop(0, lvl.sky1);
+            grad.addColorStop(1, lvl.sky2);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 800, game.groundY);
+
+            // Estrellas en espacio
+            if (currentScene().isSpace) {
+                ctx.fillStyle = '#fff';
+                for (let i = 0; i < 60; i++) {
+                    const sx = (i * 97 + Math.sin(i) * 50) % 800;
+                    const sy = (i * 53 + Math.cos(i) * 30) % (game.groundY - 20);
+                    const size = 1 + Math.sin(Date.now() / 500 + i) * 0.5;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Nubes (no en espacio)
+            if (game.currentScene !== 4) {
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                game.clouds.forEach(c => {
+                    ctx.beginPath();
+                    ctx.arc(c.x, c.y, c.w * 0.25, 0, Math.PI * 2);
+                    ctx.arc(c.x + c.w * 0.25, c.y - 8, c.w * 0.3, 0, Math.PI * 2);
+                    ctx.arc(c.x + c.w * 0.55, c.y, c.w * 0.22, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+
+            // Montañas
+            ctx.fillStyle = lvl.mountain;
+            for (let i = 0; i < 4; i++) {
+                const mx = i * 250 - (game.bgOffset * 0.1) % 250;
+                ctx.beginPath();
+                ctx.moveTo(mx, game.groundY);
+                ctx.lineTo(mx + 125, game.groundY - 100);
+                ctx.lineTo(mx + 250, game.groundY);
+                ctx.fill();
+            }
+
+            // Ciudad: edificios en vez de árboles
+            if (currentScene().isCity) {
+                game.trees.forEach(t => {
+                    ctx.fillStyle = '#546E7A';
+                    ctx.fillRect(t.x, game.groundY - t.h - 20, 28, t.h + 20);
+                    ctx.fillStyle = '#FFD54F';
+                    for (let wy = 0; wy < t.h; wy += 15) {
+                        for (let wx = 4; wx < 24; wx += 10) {
+                            if (Math.sin(t.x + wy + wx) > 0) {
+                                ctx.fillRect(t.x + wx, game.groundY - t.h - 15 + wy, 5, 7);
+                            }
+                        }
+                    }
+                });
+            } else {
+                game.trees.forEach(t => {
+                    ctx.fillStyle = lvl.treeTrunk;
+                    ctx.fillRect(t.x + 8, game.groundY - t.h, 6, t.h);
+                    ctx.fillStyle = lvl.treeLeaf1;
+                    ctx.beginPath();
+                    ctx.arc(t.x + 11, game.groundY - t.h - 5, 18, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = lvl.treeLeaf2;
+                    ctx.beginPath();
+                    ctx.arc(t.x + 11, game.groundY - t.h - 12, 13, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+            }
+
+            // Suelo
+            ctx.fillStyle = lvl.ground;
+            ctx.fillRect(0, game.groundY, 800, 80);
+            ctx.fillStyle = lvl.groundLine;
+            ctx.fillRect(0, game.groundY, 800, 4);
+
+            ctx.fillStyle = lvl.grass;
+            for (let i = 0; i < 40; i++) {
+                const gx = (i * 22 - game.bgOffset * 0.8) % 820;
+                ctx.fillRect(gx, game.groundY - 3, 2, 6);
+            }
+        }
+
+        function drawHUD() {
+            const r = game.runner;
+            const p = players[currentPlayer];
+            const scene = currentScene();
+
+            // Panel superior
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            ctx.roundRect(10, 10, 200, 50, 8);
+            ctx.fill();
+
+            ctx.fillStyle = p.color;
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`🏃 ${p.name}`, 20, 30);
+
+            ctx.fillStyle = '#FFD54F';
+            ctx.font = 'bold 14px Arial';
+            ctx.fillText(`${Math.floor(r.distance)}m`, 20, 50);
+
+            ctx.fillStyle = '#B0BEC5';
+            ctx.font = '12px Arial';
+            ctx.fillText(`| ${scene.name}`, 85, 50);
+
+            // Velocidad
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            ctx.roundRect(620, 10, 170, 28, 8);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Arial';
+            ctx.textAlign = 'right';
+            const speedKmh = Math.floor(r.speed * 5);
+            ctx.fillText(`⚡ ${speedKmh} km/h`, 780, 28);
+
+            // Controles
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'right';
+            const isMobile = 'ontouchstart' in window;
+            ctx.fillText(isMobile ? 'Arriba = Saltar | Abajo = Agacharse' : '↑/ESPACIO = Saltar  |  ↓/S = Agacharse', 790, 55);
+        }
+
+        // --- PANTALLAS ---
+        function drawMenu() {
+            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            grad.addColorStop(0, '#1a1a2e');
+            grad.addColorStop(1, '#16213e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 800, 400);
+
+            ctx.fillStyle = '#fff';
+            for (let i = 0; i < 50; i++) {
+                const sx = (i * 97 + Math.sin(i) * 50) % 800;
+                const sy = (i * 53 + Math.cos(i) * 30) % 300;
+                const size = 1 + Math.sin(Date.now() / 500 + i) * 0.5;
+                ctx.beginPath();
+                ctx.arc(sx, sy, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.fillStyle = '#FFD54F';
+            ctx.font = 'bold 44px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('🏃 CARRERA 🏃', 400, 75);
+
+            ctx.font = 'bold 36px Arial';
+            ctx.fillStyle = players[0].color;
+            ctx.fillText('GINO', 260, 145);
+            ctx.fillStyle = '#FFD54F';
+            ctx.fillText('vs', 400, 145);
+            ctx.fillStyle = players[1].color;
+            ctx.fillText('BENI', 540, 145);
+
+            drawRunner(230, 165, 45, 70, players[0], 0, true, Math.floor(Date.now() / 100));
+            drawRunner(510, 177, 38, 56, players[1], 0, true, Math.floor(Date.now() / 100));
+
+            ctx.fillStyle = '#B0BEC5';
+            ctx.font = '15px Arial';
+            ctx.fillText(`Escenarios: ${scenes.map(s => s.name).join(' → ')}`, 400, 275);
+            ctx.fillText('Un golpe y perdés. Gana el que recorre más.', 400, 300);
+
+            const pulse = Math.sin(Date.now() / 300) * 0.15 + 0.85;
+            ctx.fillStyle = `rgba(76, 175, 80, ${pulse})`;
+            ctx.beginPath();
+            ctx.roundRect(300, 325, 200, 50, 12);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 22px Arial';
+            ctx.fillText('EMPEZAR', 400, 357);
+        }
+
+        function drawSkinSelect() {
+            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            grad.addColorStop(0, '#1a1a2e');
+            grad.addColorStop(1, '#16213e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 800, 400);
+
+            const p = players[skinSelectPlayer];
+            ctx.fillStyle = p.color;
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${p.name} - Elegí tu skin`, 400, 45);
+
+            const cols = 4, boxW = 120, boxH = 115, gap = 14;
+            const startX = (800 - (cols * boxW + (cols - 1) * gap)) / 2;
+            const startY = 60;
+
+            for (let i = 0; i < skins.length; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const bx = startX + col * (boxW + gap);
+                const by = startY + row * (boxH + gap);
+
+                const isSelected = p.skin && p.skin.id === skins[i].id;
+                const isHover = skinHover === i;
+
+                ctx.fillStyle = isSelected ? 'rgba(255,215,0,0.25)' : isHover ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.05)';
+                ctx.strokeStyle = isSelected ? '#FFD54F' : isHover ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.15)';
+                ctx.lineWidth = isSelected ? 3 : 1.5;
+                ctx.beginPath();
+                ctx.roundRect(bx, by, boxW, boxH, 10);
+                ctx.fill();
+                ctx.stroke();
+
+                const previewPlayer = { ...p, skin: skins[i] };
+                const pw = skinSelectPlayer === 0 ? 30 : 26;
+                const ph = skinSelectPlayer === 0 ? 48 : 38;
+                drawRunner(bx + boxW / 2 - pw / 2, by + 8, pw, ph, previewPlayer, 0, true, Math.floor(Date.now() / 100));
+
+                ctx.fillStyle = isSelected ? '#FFD54F' : '#B0BEC5';
+                ctx.font = `${isSelected ? 'bold ' : ''}12px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText(skins[i].label, bx + boxW / 2, by + boxH - 8);
+
+                if (isSelected) {
+                    ctx.fillStyle = '#FFD54F';
+                    ctx.font = '16px Arial';
+                    ctx.fillText('✓', bx + boxW - 14, by + 16);
+                }
+            }
+
+            const btnY = startY + 2 * (boxH + gap) + 8;
+            ctx.fillStyle = '#4CAF50';
+            ctx.beginPath();
+            ctx.roundRect(310, btnY, 180, 42, 10);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('LISTO', 400, btnY + 27);
+        }
+
+        function drawDeadScreen() {
+            drawBackground();
+            game.obstacles.forEach(drawObstacle);
+            const r = game.runner;
+            const p = players[currentPlayer];
+            ctx.save();
+            ctx.globalAlpha = 0.6;
+            drawRunner(r.x, r.y, r.w, r.h, p, 0, true, 0);
+            ctx.restore();
+            drawParticles();
+            drawHUD();
+
+            const alpha = Math.min(deadTimer / 40, 0.7);
+            ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+            ctx.fillRect(0, 0, 800, 400);
+
+            if (deadTimer > 30) {
+                ctx.fillStyle = '#FF5252';
+                ctx.font = 'bold 40px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('💥 ¡CHOCASTE! 💥', 400, 160);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px Arial';
+                ctx.fillText(`${p.name} recorrió ${Math.floor(r.distance)}m`, 400, 215);
+                ctx.fillStyle = '#B0BEC5';
+                ctx.font = '16px Arial';
+                ctx.fillText(`Último escenario: ${currentScene().name}`, 400, 248);
+            }
+        }
+
+        function drawFinishedScreen() {
+            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            grad.addColorStop(0, '#1a1a2e');
+            grad.addColorStop(1, '#16213e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 800, 400);
+
+            const p = players[0];
+            const b = p.best;
+
+            ctx.fillStyle = p.color;
+            ctx.font = 'bold 32px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${p.name} terminó`, 400, 90);
+
+            ctx.fillStyle = '#FFD54F';
+            ctx.font = 'bold 40px Arial';
+            ctx.fillText(`${b.distance}m`, 400, 150);
+
+            ctx.fillStyle = '#B0BEC5';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Último escenario: ${b.scene}`, 400, 185);
+
+            drawRunner(375, 200, p.width, p.height, p, 0, true, Math.floor(Date.now() / 100));
+
+            ctx.fillStyle = '#4CAF50';
+            ctx.beginPath();
+            ctx.roundRect(280, 310, 240, 50, 12);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText(`Turno de ${players[1].name}`, 400, 342);
+        }
+
+        function drawResults() {
+            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            grad.addColorStop(0, '#1a1a2e');
+            grad.addColorStop(1, '#16213e');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 800, 400);
+
+            // Confetti
+            for (let i = 0; i < 40; i++) {
+                const colors = ['#FFD54F', '#FF5252', '#69F0AE', '#448AFF', '#FF4081'];
+                ctx.fillStyle = colors[i % colors.length];
+                const cx = (i * 73 + Date.now() / 20) % 840 - 20;
+                const cy = (i * 47 + Date.now() / 15) % 420 - 20;
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate((Date.now() / 500 + i) % (Math.PI * 2));
+                ctx.fillRect(-3, -3, 6, 6);
+                ctx.restore();
+            }
+
+            const b0 = players[0].best;
+            const b1 = players[1].best;
+            let winner;
+            if (b0.distance > b1.distance) winner = 0;
+            else if (b1.distance > b0.distance) winner = 1;
+            else winner = -1;
+
+            ctx.fillStyle = '#FFD54F';
+            ctx.font = 'bold 38px Arial';
+            ctx.textAlign = 'center';
+
+            if (winner >= 0) {
+                ctx.fillText(`🏆 ¡GANÓ ${players[winner].name}! 🏆`, 400, 55);
+            } else {
+                ctx.fillText('🤝 ¡EMPATE! 🤝', 400, 55);
+            }
+
+            for (let i = 0; i < 2; i++) {
+                const p = players[i];
+                const b = p.best;
+                const cx = i === 0 ? 200 : 600;
+                const isWinner = winner === i;
+
+                if (isWinner) {
+                    ctx.fillStyle = 'rgba(255,215,0,0.15)';
+                    ctx.beginPath();
+                    ctx.roundRect(cx - 130, 65, 260, 230, 12);
+                    ctx.fill();
+                }
+
+                ctx.fillStyle = p.color;
+                ctx.font = `bold ${isWinner ? 30 : 24}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.fillText(p.name, cx, 100);
+
+                if (isWinner) {
+                    ctx.fillStyle = '#FFD54F';
+                    ctx.font = '18px Arial';
+                    ctx.fillText('👑 GANADOR', cx, 125);
+                }
+
+                drawRunner(cx - p.width / 2, 135, p.width, p.height, p, 0, true, Math.floor(Date.now() / 100));
+
+                ctx.fillStyle = '#FFD54F';
+                ctx.font = 'bold 28px Arial';
+                ctx.fillText(`${b.distance}m`, cx, 225);
+
+                ctx.fillStyle = '#B0BEC5';
+                ctx.font = '14px Arial';
+                ctx.fillText(`Último: ${b.scene}`, cx, 250);
+
+                if (winner === i) {
+                    const diff = Math.abs(b0.distance - b1.distance);
+                    ctx.fillStyle = '#69F0AE';
+                    ctx.font = '13px Arial';
+                    ctx.fillText(`+${diff}m de ventaja`, cx, 275);
+                }
+            }
+
+            ctx.fillStyle = '#4CAF50';
+            ctx.beginPath();
+            ctx.roundRect(310, 335, 180, 45, 10);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 17px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('JUGAR DE NUEVO', 400, 364);
+        }
+
+        // --- DRAW LOOP ---
+        function draw() {
+            ctx.clearRect(0, 0, 800, 400);
+
+            if (state === 'menu') drawMenu();
+            else if (state === 'skinSelect') drawSkinSelect();
+            else if (state === 'playing') {
+                drawBackground();
+                game.obstacles.forEach(drawObstacle);
+                const r = game.runner;
+                const p = players[currentPlayer];
+                drawRunner(r.x, r.y, r.w, r.h, p, 0, r.grounded, r.runFrame, r.ducking);
+                drawParticles();
+                drawHUD();
+            }
+            else if (state === 'dead') drawDeadScreen();
+            else if (state === 'finished') drawFinishedScreen();
+            else if (state === 'results') drawResults();
+        }
+
+        // --- INPUT ---
+        function getCanvasCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+        }
+
+        function getSkinClickIndex(mx, my) {
+            const cols = 4, boxW = 120, boxH = 115, gap = 14;
+            const startX = (800 - (cols * boxW + (cols - 1) * gap)) / 2;
+            const startY = 60;
+            for (let i = 0; i < skins.length; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const bx = startX + col * (boxW + gap);
+                const by = startY + row * (boxH + gap);
+                if (mx >= bx && mx <= bx + boxW && my >= by && my <= by + boxH) return i;
+            }
+            return -1;
+        }
+
+        function isSkinConfirmClick(mx, my) {
+            const btnY = 60 + 2 * (115 + 14) + 8;
+            return mx >= 310 && mx <= 490 && my >= btnY && my <= btnY + 42;
+        }
+
+        document.addEventListener('keydown', e => {
+            keysDown[e.code] = true;
+            if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+                e.preventDefault();
+                if (state === 'playing' && game.runner.grounded && !game.runner.ducking) {
+                    game.runner.vy = JUMP_FORCE;
+                    game.runner.grounded = false;
+                } else if (state === 'menu') goToSkinSelect();
+                else if (state === 'finished') startNextPlayer();
+                else if (state === 'results') resetGame();
+            }
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') e.preventDefault();
+        });
+
+        document.addEventListener('keyup', e => {
+            keysDown[e.code] = false;
+        });
+
+        canvas.addEventListener('mousemove', e => {
+            if (state === 'skinSelect') {
+                const { x, y } = getCanvasCoords(e);
+                skinHover = getSkinClickIndex(x, y);
+            }
+        });
+
+        canvas.addEventListener('click', e => {
+            const { x, y } = getCanvasCoords(e);
+            if (state === 'menu') goToSkinSelect();
+            else if (state === 'skinSelect') {
+                const idx = getSkinClickIndex(x, y);
+                if (idx >= 0) players[skinSelectPlayer].skin = skins[idx];
+                if (isSkinConfirmClick(x, y)) confirmSkin();
+            }
+            else if (state === 'finished') startNextPlayer();
+            else if (state === 'results') resetGame();
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            const { x, y } = getCanvasCoords(e);
+            if (state === 'playing') {
+                // Mitad superior = saltar, mitad inferior = agacharse
+                if (y < 200) {
+                    if (game.runner.grounded && !game.runner.ducking) {
+                        game.runner.vy = JUMP_FORCE;
+                        game.runner.grounded = false;
+                    }
+                } else {
+                    if (game.runner.grounded) {
+                        game.runner.ducking = true;
+                        game.runner.h = Math.floor(game.runner.normalH * DUCK_HEIGHT_RATIO);
+                        game.runner.y = game.groundY - game.runner.h;
+                    }
+                }
+            } else if (state === 'menu') goToSkinSelect();
+            else if (state === 'skinSelect') {
+                const idx = getSkinClickIndex(x, y);
+                if (idx >= 0) players[skinSelectPlayer].skin = skins[idx];
+                if (isSkinConfirmClick(x, y)) confirmSkin();
+            }
+            else if (state === 'finished') startNextPlayer();
+            else if (state === 'results') resetGame();
+        });
+
+        canvas.addEventListener('touchend', e => {
+            e.preventDefault();
+            if (state === 'playing' && game.runner.ducking) {
+                game.runner.ducking = false;
+                game.runner.h = game.runner.normalH;
+                game.runner.y = game.groundY - game.runner.h;
+            }
+        });
+
+        function goToSkinSelect() {
+            skinSelectPlayer = 0;
+            players[0].best = null;
+            players[1].best = null;
+            players[0].skin = skins[0]; // Boca default
+            players[1].skin = skins[1]; // Huracán default
+            state = 'skinSelect';
+        }
+
+        function confirmSkin() {
+            if (skinSelectPlayer === 0) {
+                skinSelectPlayer = 1;
+            } else {
+                currentPlayer = 0;
+                initRun();
+                state = 'playing';
+            }
+        }
+
+        function startNextPlayer() {
+            currentPlayer = 1;
+            initRun();
+            state = 'playing';
+        }
+
+        function resetGame() {
+            state = 'menu';
+        }
+
+        // --- LOOP ---
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+        loop();
+    </script>
+</body>
+</html>
