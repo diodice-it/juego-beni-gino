@@ -52,12 +52,29 @@
             color: rgba(255,255,255,0.85);
         }
         #btn-duck:active { background: #E65100; }
+        #btn-power {
+            background: #444;
+            color: rgba(255,255,255,0.4);
+            flex: 0 0 60px;
+            font-size: 22px;
+            pointer-events: none;
+            opacity: 0.4;
+            transition: opacity 0.2s, background 0.2s;
+        }
+        #btn-power.active {
+            background: #F9A825;
+            color: #fff;
+            pointer-events: auto;
+            opacity: 1;
+        }
+        #btn-power.active:active { background: #F57F17; }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
     <div id="mobile-controls">
         <button id="btn-jump">SALTAR</button>
+        <button id="btn-power">⭐</button>
         <button id="btn-duck">AGACHARSE</button>
     </div>
     <script>
@@ -570,6 +587,10 @@
         }
 
         function update() {
+            // Actualizar botón estrella mobile
+            if (isMobile) {
+                btnPower.classList.toggle('active', !!(game.heldPowerup));
+            }
             if (state === 'dead') {
                 deadTimer++;
                 updateParticles();
@@ -1645,7 +1666,7 @@
                 ctx.fillText(puLabels[game.heldPowerup], 740, 64);
                 ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.font = '11px Arial';
-                ctx.fillText('2x TAP', 780, 78);
+                ctx.fillText(isMobile ? '⭐ BOTÓN' : 'TECLA E', 780, 78);
             } else if (game.shieldActive) {
                 ctx.fillStyle = 'rgba(0,0,0,0.6)';
                 ctx.beginPath();
@@ -1671,7 +1692,7 @@
                 ctx.fillStyle = 'rgba(255,255,255,0.25)';
                 ctx.font = '11px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillText('ESPACIO = Saltar  |  S = Agacharse  |  2x = Power-up', 790, 96);
+                ctx.fillText('ESPACIO = Saltar  |  S = Agacharse  |  E = Power-up', 790, 96);
             }
 
             // Scene name fade-in
@@ -2193,21 +2214,16 @@
             if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
                 e.preventDefault();
                 if (state === 'playing') {
-                    const now = Date.now();
-                    // Doble tap detection
-                    if (now - game.lastTapTime < 300 && game.heldPowerup) {
-                        activatePowerup();
-                        game.lastTapTime = 0;
-                    } else {
-                        game.lastTapTime = now;
-                        if (game.runner.grounded && !game.runner.ducking) {
-                            game.runner.vy = JUMP_FORCE;
-                            game.runner.grounded = false;
-                        }
+                    if (game.runner.grounded && !game.runner.ducking) {
+                        game.runner.vy = JUMP_FORCE;
+                        game.runner.grounded = false;
                     }
                 } else if (state === 'menu') goToSkinSelect();
                 else if (state === 'finished') startNextPlayer();
                 else if (state === 'results') resetGame();
+            }
+            if (e.code === 'KeyE' && state === 'playing' && game.heldPowerup) {
+                activatePowerup();
             }
             if (e.code === 'ArrowDown' || e.code === 'KeyS') e.preventDefault();
         });
@@ -2225,6 +2241,10 @@
 
         canvas.addEventListener('click', e => {
             const { x, y } = getCanvasCoords(e);
+            if (state === 'playing' && game.heldPowerup && x >= 610 && x <= 790 && y >= 48 && y <= 86) {
+                activatePowerup();
+                return;
+            }
             if (state === 'menu') goToSkinSelect();
             else if (state === 'skinSelect') {
                 const idx = getSkinClickIndex(x, y);
@@ -2238,24 +2258,25 @@
         // --- MOBILE BUTTON CONTROLS ---
         const btnJump = document.getElementById('btn-jump');
         const btnDuck = document.getElementById('btn-duck');
+        const btnPower = document.getElementById('btn-power');
 
         btnJump.addEventListener('touchstart', e => {
             e.preventDefault();
             if (state === 'playing') {
-                const now = Date.now();
-                if (now - game.lastTapTime < 300 && game.heldPowerup) {
-                    activatePowerup();
-                    game.lastTapTime = 0;
-                } else {
-                    game.lastTapTime = now;
-                    if (game.runner.grounded && !game.runner.ducking) {
-                        game.runner.vy = JUMP_FORCE;
-                        game.runner.grounded = false;
-                    }
+                if (game.runner.grounded && !game.runner.ducking) {
+                    game.runner.vy = JUMP_FORCE;
+                    game.runner.grounded = false;
                 }
             } else if (state === 'menu') goToSkinSelect();
             else if (state === 'finished') startNextPlayer();
             else if (state === 'results') resetGame();
+        }, { passive: false });
+
+        btnPower.addEventListener('touchstart', e => {
+            e.preventDefault();
+            if (state === 'playing' && game.heldPowerup) {
+                activatePowerup();
+            }
         }, { passive: false });
 
         btnDuck.addEventListener('touchstart', e => {
