@@ -106,8 +106,8 @@
             { name: 'Ciudad', sky1: '#455A64', sky2: '#90A4AE', ground: '#616161', groundLine: '#424242', grass: '#757575', mountain: '#78909C', hills: '#607D8B', treeTrunk: '#9E9E9E', treeLeaf1: '#78909C', treeLeaf2: '#607D8B', isCity: true },
             { name: 'Espacio', sky1: '#0D0221', sky2: '#1A0533', ground: '#4A148C', groundLine: '#6A1B9A', grass: '#7B1FA2', mountain: '#311B92', hills: '#4527A0', treeTrunk: '#CE93D8', treeLeaf1: '#E040FB', treeLeaf2: '#AA00FF', isCity: false, isSpace: true },
         ];
-        const BASE_SPEED = 8;
-        const SPEED_INCREMENT = 0.4;
+        const BASE_SPEED = 6;
+        const SPEED_INCREMENT = 0.3;
 
         // --- SKINS ---
         const skins = [
@@ -360,7 +360,13 @@
                 clouds: [], trees: [], hills: [],
                 currentScene: 0,
                 lastSceneChange: 0,
-                scenesVisited: 1
+                scenesVisited: 1,
+                powerups: [],
+                heldPowerup: null,
+                shieldActive: false,
+                slowmoTimer: 0,
+                lastTapTime: 0,
+                nextPowerup: 200
             };
             particles = [];
             speedLines = [];
@@ -393,33 +399,42 @@
             return scenes[game.currentScene % scenes.length];
         }
 
-        function spawnObstacle() {
+        function spawnObstacle(xOffset) {
             const scene = currentScene();
             const sceneName = scene.name;
-            const rand = Math.random();
+            let rand = Math.random();
             let type, w, h, elevated = false;
 
+            // No voladores antes de 500m
+            const dist = game.runner ? game.runner.distance : 0;
+            const allowFlying = dist >= 500;
+
             if (sceneName === 'Bosque') {
+                if (!allowFlying && rand >= 0.8) rand = Math.random() * 0.8;
                 if (rand < 0.35) { type = 'rock'; w = 40; h = 35; }
                 else if (rand < 0.65) { type = 'tronco'; w = 55; h = 40; }
                 else if (rand < 0.8) { type = 'hongo'; w = 30; h = 48; }
                 else { type = 'bird'; w = 50; h = 30; elevated = true; }
             } else if (sceneName === 'Desierto') {
+                if (!allowFlying && rand >= 0.85) rand = Math.random() * 0.85;
                 if (rand < 0.4) { type = 'cactus'; w = 28; h = 60; }
                 else if (rand < 0.7) { type = 'rock'; w = 40; h = 35; }
                 else if (rand < 0.85) { type = 'serpiente'; w = 45; h = 20; }
                 else { type = 'buitre'; w = 55; h = 30; elevated = true; }
             } else if (sceneName === 'Nieve') {
+                if (!allowFlying && rand >= 0.8) rand = Math.random() * 0.8;
                 if (rand < 0.35) { type = 'hielo'; w = 45; h = 38; }
                 else if (rand < 0.6) { type = 'snowman'; w = 38; h = 60; }
                 else if (rand < 0.8) { type = 'rock'; w = 40; h = 35; }
                 else { type = 'bird'; w = 50; h = 30; elevated = true; }
             } else if (sceneName === 'Ciudad') {
+                if (!allowFlying && rand >= 0.8) rand = Math.random() * 0.8;
                 if (rand < 0.35) { type = 'auto'; w = 65; h = 40; }
                 else if (rand < 0.6) { type = 'cono'; w = 24; h = 40; }
                 else if (rand < 0.8) { type = 'box'; w = 45; h = 45; }
                 else { type = 'cartel'; w = 55; h = 28; elevated = true; }
             } else {
+                if (!allowFlying && rand >= 0.8) rand = Math.random() * 0.8;
                 if (rand < 0.35) { type = 'meteorito'; w = 42; h = 40; }
                 else if (rand < 0.6) { type = 'alien'; w = 38; h = 55; }
                 else if (rand < 0.8) { type = 'cristal'; w = 28; h = 60; }
@@ -435,7 +450,123 @@
                 y = game.groundY - h;
             }
 
-            game.obstacles.push({ x: 850, y, w, h, type, elevated, wingFrame: 0 });
+            const spawnX = 850 + (xOffset || 0);
+            game.obstacles.push({ x: spawnX, y, w, h, type, elevated, wingFrame: 0 });
+        }
+
+        function spawnCombo() {
+            spawnObstacle(0);
+            spawnObstacle(100);
+        }
+
+        function spawnPowerup() {
+            const types = ['shield', 'magnet', 'slowmo'];
+            const type = types[Math.floor(Math.random() * types.length)];
+            const w = 30, h = 30;
+            const y = game.groundY - 80 - Math.random() * 40;
+            game.powerups.push({ x: 850, y, w, h, type, frame: 0 });
+        }
+
+        function activatePowerup() {
+            if (!game.heldPowerup) return;
+            const type = game.heldPowerup;
+            game.heldPowerup = null;
+            const r = game.runner;
+
+            if (type === 'shield') {
+                game.shieldActive = true;
+                for (let i = 0; i < 15; i++) {
+                    addParticle(r.x + r.w/2, r.y + r.h/2, (Math.random()-0.5)*6, (Math.random()-0.5)*6, 30, 3, 'rgb(255,215,0)');
+                }
+            } else if (type === 'magnet') {
+                r.distance += 200;
+                meterPop = 40;
+                meterFlash = 50;
+                for (let i = 0; i < 15; i++) {
+                    addParticle(r.x + r.w/2, r.y + r.h/2, (Math.random()-0.5)*6, (Math.random()-0.5)*6, 30, 3, 'rgb(76,175,80)');
+                }
+            } else if (type === 'slowmo') {
+                game.slowmoTimer = 180;
+                for (let i = 0; i < 15; i++) {
+                    addParticle(r.x + r.w/2, r.y + r.h/2, (Math.random()-0.5)*6, (Math.random()-0.5)*6, 30, 3, 'rgb(33,150,243)');
+                }
+            }
+        }
+
+        function drawPowerupItem(pu) {
+            const cx = pu.x + pu.w/2;
+            const cy = pu.y + pu.h/2 + Math.sin(pu.frame * 0.08) * 5;
+            ctx.save();
+
+            // Glow
+            const glowColors = { shield: 'rgba(255,215,0,0.3)', magnet: 'rgba(76,175,80,0.3)', slowmo: 'rgba(33,150,243,0.3)' };
+            ctx.shadowColor = glowColors[pu.type];
+            ctx.shadowBlur = 12;
+
+            if (pu.type === 'shield') {
+                // Círculo dorado
+                ctx.fillStyle = '#FFD54F';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#FFA000';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.beginPath();
+                ctx.arc(cx - 3, cy - 3, 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (pu.type === 'magnet') {
+                // Estrella verde 5 puntas
+                ctx.fillStyle = '#66BB6A';
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = -Math.PI/2 + (i * 2 * Math.PI / 5);
+                    const innerAngle = angle + Math.PI / 5;
+                    ctx.lineTo(cx + Math.cos(angle) * 12, cy + Math.sin(angle) * 12);
+                    ctx.lineTo(cx + Math.cos(innerAngle) * 5, cy + Math.sin(innerAngle) * 5);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = '#43A047';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (pu.type === 'slowmo') {
+                // Reloj azul
+                ctx.fillStyle = '#42A5F5';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#1565C0';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                ctx.fill();
+                // Agujas
+                ctx.strokeStyle = '#1565C0';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx, cy - 5);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.lineTo(cx + 3, cy + 1);
+                ctx.stroke();
+            }
+
+            // Partículas sutiles
+            if (pu.frame % 8 === 0) {
+                const colors = { shield: 'rgb(255,215,0)', magnet: 'rgb(76,175,80)', slowmo: 'rgb(33,150,243)' };
+                addParticle(cx + (Math.random()-0.5)*10, cy + (Math.random()-0.5)*10, (Math.random()-0.5)*1, -Math.random()*1, 15, 2, colors[pu.type]);
+            }
+
+            ctx.restore();
         }
 
         function update() {
@@ -469,8 +600,13 @@
                 }
             }
 
-            // Speed
-            r.speed = BASE_SPEED + Math.floor(r.distance / 500) * SPEED_INCREMENT;
+            // Speed - sube cada 600m
+            r.speed = BASE_SPEED + Math.floor(r.distance / 600) * SPEED_INCREMENT;
+            // Slowmo effect
+            if (game.slowmoTimer > 0) {
+                r.speed *= 0.6;
+                game.slowmoTimer--;
+            }
             if (r.speed > r.maxSpeed) r.maxSpeed = r.speed;
             r.distance += r.speed * 0.5;
 
@@ -542,12 +678,52 @@
             // Speed lines
             updateSpeedLines(r.speed);
 
-            // Obstacles
+            // Obstacles - dificultad progresiva
             game.nextObstacle--;
-            const obstacleRate = Math.max(40, 90 - Math.floor(r.distance / 500) * 3);
+            let obstacleRate;
+            if (r.distance < 500) obstacleRate = 120;
+            else if (r.distance < 1500) obstacleRate = 90;
+            else if (r.distance < 3000) obstacleRate = 60;
+            else obstacleRate = 40;
             if (game.nextObstacle <= 0) {
-                spawnObstacle();
+                // Combos desde 1500m
+                let isCombo = false;
+                if (r.distance >= 3000 && Math.random() < 0.35) isCombo = true;
+                else if (r.distance >= 1500 && Math.random() < 0.20) isCombo = true;
+
+                if (isCombo) {
+                    spawnCombo();
+                } else {
+                    spawnObstacle();
+                }
                 game.nextObstacle = obstacleRate + Math.floor(Math.random() * 35);
+            }
+
+            // Power-ups spawn
+            game.nextPowerup--;
+            if (game.nextPowerup <= 0 && r.distance >= 300) {
+                spawnPowerup();
+                game.nextPowerup = Math.floor(400 + Math.random() * 300) / (r.speed * 0.5);
+            }
+
+            // Update power-ups on screen
+            for (let i = game.powerups.length - 1; i >= 0; i--) {
+                const pu = game.powerups[i];
+                pu.x -= r.speed;
+                pu.frame++;
+                if (pu.x + pu.w < 0) { game.powerups.splice(i, 1); continue; }
+
+                // Collision with runner (recoger)
+                if (r.x + r.w > pu.x && r.x < pu.x + pu.w &&
+                    r.y + r.h > pu.y && r.y < pu.y + pu.h) {
+                    game.heldPowerup = pu.type;
+                    game.powerups.splice(i, 1);
+                    // Pickup particles
+                    const colors = { shield: 'rgb(255,215,0)', magnet: 'rgb(76,175,80)', slowmo: 'rgb(33,150,243)' };
+                    for (let j = 0; j < 10; j++) {
+                        addParticle(pu.x + pu.w/2, pu.y + pu.h/2, (Math.random()-0.5)*6, (Math.random()-0.5)*6, 25, 3, colors[pu.type]);
+                    }
+                }
             }
 
             for (let i = game.obstacles.length - 1; i >= 0; i--) {
@@ -560,6 +736,15 @@
                 const margin = 6;
                 if (r.x + r.w - margin > o.x && r.x + margin < o.x + o.w &&
                     r.y + r.h > o.y + margin && r.y < o.y + o.h - margin) {
+                    // Escudo activo - absorbe el golpe
+                    if (game.shieldActive) {
+                        game.shieldActive = false;
+                        game.obstacles.splice(i, 1);
+                        for (let j = 0; j < 20; j++) {
+                            addParticle(r.x + r.w/2, r.y + r.h/2, (Math.random()-0.5)*8, (Math.random()-0.5)*8, 30, 3 + Math.random()*3, 'rgb(255,215,0)');
+                        }
+                        continue;
+                    }
                     r.alive = false;
                     state = 'dead';
                     deadTimer = 0;
@@ -1263,12 +1448,47 @@
             const speedKmh = Math.floor(r.speed * 5);
             ctx.fillText(`${speedKmh} km/h`, 780, 32);
 
+            // Power-up HUD
+            if (game.heldPowerup) {
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.beginPath();
+                ctx.roundRect(610, 48, 180, 38, 10);
+                ctx.fill();
+                const puLabels = { shield: 'ESCUDO', magnet: 'IMAN +200m', slowmo: 'SLOW-MO' };
+                const puColors = { shield: '#FFD54F', magnet: '#66BB6A', slowmo: '#42A5F5' };
+                ctx.fillStyle = puColors[game.heldPowerup];
+                ctx.font = 'bold 13px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText(puLabels[game.heldPowerup], 740, 64);
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.font = '11px Arial';
+                ctx.fillText('2x TAP', 780, 78);
+            } else if (game.shieldActive) {
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.beginPath();
+                ctx.roundRect(610, 48, 180, 28, 10);
+                ctx.fill();
+                ctx.fillStyle = '#FFD54F';
+                ctx.font = 'bold 12px Arial';
+                ctx.textAlign = 'right';
+                ctx.fillText('ESCUDO ACTIVO', 780, 66);
+            }
+
+            // Slowmo timer
+            if (game.slowmoTimer > 0) {
+                ctx.fillStyle = 'rgba(33,150,243,0.7)';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                const secs = Math.ceil(game.slowmoTimer / 60);
+                ctx.fillText(`SLOW-MO ${secs}s`, GAME_W / 2, 30);
+            }
+
             // Controls hint
             if (!isMobile) {
                 ctx.fillStyle = 'rgba(255,255,255,0.25)';
                 ctx.font = '11px Arial';
                 ctx.textAlign = 'right';
-                ctx.fillText('ESPACIO = Saltar  |  S = Agacharse', 790, 58);
+                ctx.fillText('ESPACIO = Saltar  |  S = Agacharse  |  2x = Power-up', 790, 96);
             }
 
             // Scene name fade-in
@@ -1703,10 +1923,29 @@
             else if (state === 'skinSelect') drawSkinSelect();
             else if (state === 'playing') {
                 drawBackground();
+                // Slowmo tint
+                if (game.slowmoTimer > 0) {
+                    ctx.fillStyle = `rgba(33,150,243,${0.08 + Math.sin(frameCount * 0.1) * 0.03})`;
+                    ctx.fillRect(0, 0, GAME_W, GAME_H);
+                }
                 drawSpeedLines();
                 game.obstacles.forEach(drawObstacle);
+                // Power-ups en pantalla
+                game.powerups.forEach(drawPowerupItem);
                 const r = game.runner;
                 const p = players[currentPlayer];
+                // Aura de escudo activo
+                if (game.shieldActive) {
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(255,215,0,${0.4 + Math.sin(frameCount * 0.15) * 0.2})`;
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = 'rgba(255,215,0,0.5)';
+                    ctx.shadowBlur = 15;
+                    ctx.beginPath();
+                    ctx.ellipse(r.x + r.w/2, r.y + r.h/2, r.w/2 + 8, r.h/2 + 5, 0, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.restore();
+                }
                 drawRunner(r.x, r.y, r.w, r.h, p, 0, r.grounded, r.runFrame, r.ducking);
                 drawParticles();
                 drawHUD();
@@ -1750,9 +1989,19 @@
             keysDown[e.code] = true;
             if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
                 e.preventDefault();
-                if (state === 'playing' && game.runner.grounded && !game.runner.ducking) {
-                    game.runner.vy = JUMP_FORCE;
-                    game.runner.grounded = false;
+                if (state === 'playing') {
+                    const now = Date.now();
+                    // Doble tap detection
+                    if (now - game.lastTapTime < 300 && game.heldPowerup) {
+                        activatePowerup();
+                        game.lastTapTime = 0;
+                    } else {
+                        game.lastTapTime = now;
+                        if (game.runner.grounded && !game.runner.ducking) {
+                            game.runner.vy = JUMP_FORCE;
+                            game.runner.grounded = false;
+                        }
+                    }
                 } else if (state === 'menu') goToSkinSelect();
                 else if (state === 'finished') startNextPlayer();
                 else if (state === 'results') resetGame();
@@ -1789,9 +2038,18 @@
 
         btnJump.addEventListener('touchstart', e => {
             e.preventDefault();
-            if (state === 'playing' && game.runner.grounded && !game.runner.ducking) {
-                game.runner.vy = JUMP_FORCE;
-                game.runner.grounded = false;
+            if (state === 'playing') {
+                const now = Date.now();
+                if (now - game.lastTapTime < 300 && game.heldPowerup) {
+                    activatePowerup();
+                    game.lastTapTime = 0;
+                } else {
+                    game.lastTapTime = now;
+                    if (game.runner.grounded && !game.runner.ducking) {
+                        game.runner.vy = JUMP_FORCE;
+                        game.runner.grounded = false;
+                    }
+                }
             } else if (state === 'menu') goToSkinSelect();
             else if (state === 'finished') startNextPlayer();
             else if (state === 'results') resetGame();
