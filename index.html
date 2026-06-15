@@ -31,27 +31,27 @@
         #mobile-controls {
             display: none;
             width: 100%;
-            gap: 0;
         }
         #mobile-controls button {
             flex: 1;
             border: none;
-            font-size: 24px;
+            font-size: 16px;
             font-weight: bold;
-            letter-spacing: 2px;
+            letter-spacing: 1px;
             -webkit-tap-highlight-color: transparent;
             touch-action: none;
         }
         #btn-jump {
-            background: #2E7D32;
-            color: #fff;
+            background: #1B5E20;
+            color: rgba(255,255,255,0.85);
+            border-right: 1px solid rgba(0,0,0,0.3);
         }
-        #btn-jump:active { background: #4CAF50; }
+        #btn-jump:active { background: #388E3C; }
         #btn-duck {
-            background: #E65100;
-            color: #fff;
+            background: #BF360C;
+            color: rgba(255,255,255,0.85);
         }
-        #btn-duck:active { background: #FF9800; }
+        #btn-duck:active { background: #E65100; }
     </style>
 </head>
 <body>
@@ -64,7 +64,7 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         const GAME_W = 800;
-        const GAME_H = 400;
+        const GAME_H = 550;
         canvas.width = GAME_W;
         canvas.height = GAME_H;
 
@@ -76,8 +76,7 @@
             const w = window.innerWidth;
             const h = window.innerHeight;
             if (isMobile) {
-                // Canvas ocupa el ancho completo, botones abajo
-                const btnH = Math.floor(h * 0.22);
+                const btnH = Math.max(44, Math.floor(h * 0.08));
                 const canvasH = h - btnH;
                 const scale = Math.min(w / GAME_W, canvasH / GAME_H);
                 const cw = Math.floor(GAME_W * scale);
@@ -169,7 +168,7 @@
         // --- JUEGO ---
         function initRun() {
             const p = players[currentPlayer];
-            const groundY = 320;
+            const groundY = 470;
             game = {
                 runner: {
                     x: 80, y: groundY - p.height,
@@ -918,7 +917,7 @@
             grad.addColorStop(0, lvl.sky1);
             grad.addColorStop(1, lvl.sky2);
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 800, game.groundY);
+            ctx.fillRect(0, 0, GAME_W, game.groundY);
 
             // Estrellas en espacio
             if (currentScene().isSpace) {
@@ -987,9 +986,9 @@
 
             // Suelo
             ctx.fillStyle = lvl.ground;
-            ctx.fillRect(0, game.groundY, 800, 80);
+            ctx.fillRect(0, game.groundY, GAME_W, GAME_H - game.groundY);
             ctx.fillStyle = lvl.groundLine;
-            ctx.fillRect(0, game.groundY, 800, 4);
+            ctx.fillRect(0, game.groundY, GAME_W, 4);
 
             ctx.fillStyle = lvl.grass;
             for (let i = 0; i < 40; i++) {
@@ -1044,69 +1043,71 @@
 
         // --- PANTALLAS ---
         function drawMenu() {
-            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
             grad.addColorStop(0, '#1a1a2e');
             grad.addColorStop(1, '#16213e');
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 800, 400);
+            ctx.fillRect(0, 0, GAME_W, GAME_H);
 
             ctx.fillStyle = '#fff';
             for (let i = 0; i < 50; i++) {
                 const sx = (i * 97 + Math.sin(i) * 50) % 800;
-                const sy = (i * 53 + Math.cos(i) * 30) % 300;
+                const sy = (i * 53 + Math.cos(i) * 30) % (GAME_H - 50);
                 const size = 1 + Math.sin(Date.now() / 500 + i) * 0.5;
                 ctx.beginPath();
                 ctx.arc(sx, sy, size, 0, Math.PI * 2);
                 ctx.fill();
             }
 
+            const cy = GAME_H / 2;
+
             ctx.fillStyle = '#FFD54F';
             ctx.font = 'bold 44px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('🏃 CARRERA 🏃', 400, 75);
+            ctx.fillText('🏃 CARRERA 🏃', 400, cy - 150);
 
             ctx.font = 'bold 36px Arial';
             ctx.fillStyle = players[0].color;
-            ctx.fillText('GINO', 260, 145);
+            ctx.fillText('GINO', 260, cy - 80);
             ctx.fillStyle = '#FFD54F';
-            ctx.fillText('vs', 400, 145);
+            ctx.fillText('vs', 400, cy - 80);
             ctx.fillStyle = players[1].color;
-            ctx.fillText('BENI', 540, 145);
+            ctx.fillText('BENI', 540, cy - 80);
 
-            drawRunner(230, 165, 45, 70, players[0], 0, true, Math.floor(Date.now() / 100));
-            drawRunner(510, 177, 38, 56, players[1], 0, true, Math.floor(Date.now() / 100));
+            drawRunner(230, cy - 60, 45, 70, players[0], 0, true, Math.floor(Date.now() / 100));
+            drawRunner(510, cy - 48, 38, 56, players[1], 0, true, Math.floor(Date.now() / 100));
 
             ctx.fillStyle = '#B0BEC5';
             ctx.font = '15px Arial';
-            ctx.fillText(`Escenarios: ${scenes.map(s => s.name).join(' → ')}`, 400, 275);
-            ctx.fillText('Un golpe y perdés. Gana el que recorre más.', 400, 300);
+            ctx.fillText(`Escenarios: ${scenes.map(s => s.name).join(' → ')}`, 400, cy + 50);
+            ctx.fillText('Un golpe y perdés. Gana el que recorre más.', 400, cy + 75);
 
             const pulse = Math.sin(Date.now() / 300) * 0.15 + 0.85;
             ctx.fillStyle = `rgba(76, 175, 80, ${pulse})`;
             ctx.beginPath();
-            ctx.roundRect(300, 325, 200, 50, 12);
+            ctx.roundRect(300, cy + 100, 200, 50, 12);
             ctx.fill();
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 22px Arial';
-            ctx.fillText('EMPEZAR', 400, 357);
+            ctx.fillText('EMPEZAR', 400, cy + 132);
         }
 
         function drawSkinSelect() {
-            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
             grad.addColorStop(0, '#1a1a2e');
             grad.addColorStop(1, '#16213e');
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 800, 400);
+            ctx.fillRect(0, 0, GAME_W, GAME_H);
 
             const p = players[skinSelectPlayer];
             ctx.fillStyle = p.color;
             ctx.font = 'bold 30px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`${p.name} - Elegí tu skin`, 400, 45);
+            ctx.fillText(`${p.name} - Elegí tu skin`, 400, 50);
 
             const cols = 4, boxW = 120, boxH = 115, gap = 14;
-            const startX = (800 - (cols * boxW + (cols - 1) * gap)) / 2;
-            const startY = 60;
+            const startX = (GAME_W - (cols * boxW + (cols - 1) * gap)) / 2;
+            const startY = (GAME_H - (2 * boxH + gap + 60)) / 2;
 
             for (let i = 0; i < skins.length; i++) {
                 const col = i % cols;
@@ -1167,29 +1168,29 @@
 
             const alpha = Math.min(deadTimer / 40, 0.7);
             ctx.fillStyle = `rgba(0,0,0,${alpha})`;
-            ctx.fillRect(0, 0, 800, 400);
+            ctx.fillRect(0, 0, GAME_W, GAME_H);
 
             if (deadTimer > 30) {
                 ctx.fillStyle = '#FF5252';
                 ctx.font = 'bold 40px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('💥 ¡CHOCASTE! 💥', 400, 160);
+                ctx.fillText('💥 ¡CHOCASTE! 💥', 400, GAME_H / 2 - 40);
 
                 ctx.fillStyle = '#fff';
                 ctx.font = '24px Arial';
-                ctx.fillText(`${p.name} recorrió ${Math.floor(r.distance)}m`, 400, 215);
+                ctx.fillText(`${p.name} recorrió ${Math.floor(r.distance)}m`, 400, GAME_H / 2 + 15);
                 ctx.fillStyle = '#B0BEC5';
                 ctx.font = '16px Arial';
-                ctx.fillText(`Último escenario: ${currentScene().name}`, 400, 248);
+                ctx.fillText(`Último escenario: ${currentScene().name}`, 400, GAME_H / 2 + 48);
             }
         }
 
         function drawFinishedScreen() {
-            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
             grad.addColorStop(0, '#1a1a2e');
             grad.addColorStop(1, '#16213e');
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 800, 400);
+            ctx.fillRect(0, 0, GAME_W, GAME_H);
 
             const p = players[0];
             const b = p.best;
@@ -1197,33 +1198,34 @@
             ctx.fillStyle = p.color;
             ctx.font = 'bold 32px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(`${p.name} terminó`, 400, 90);
+            const cy = GAME_H / 2;
+            ctx.fillText(`${p.name} terminó`, 400, cy - 100);
 
             ctx.fillStyle = '#FFD54F';
             ctx.font = 'bold 40px Arial';
-            ctx.fillText(`${b.distance}m`, 400, 150);
+            ctx.fillText(`${b.distance}m`, 400, cy - 40);
 
             ctx.fillStyle = '#B0BEC5';
             ctx.font = '16px Arial';
-            ctx.fillText(`Último escenario: ${b.scene}`, 400, 185);
+            ctx.fillText(`Último escenario: ${b.scene}`, 400, cy - 5);
 
-            drawRunner(375, 200, p.width, p.height, p, 0, true, Math.floor(Date.now() / 100));
+            drawRunner(375, cy + 10, p.width, p.height, p, 0, true, Math.floor(Date.now() / 100));
 
             ctx.fillStyle = '#4CAF50';
             ctx.beginPath();
-            ctx.roundRect(280, 310, 240, 50, 12);
+            ctx.roundRect(280, cy + 90, 240, 50, 12);
             ctx.fill();
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 20px Arial';
-            ctx.fillText(`Turno de ${players[1].name}`, 400, 342);
+            ctx.fillText(`Turno de ${players[1].name}`, 400, cy + 122);
         }
 
         function drawResults() {
-            const grad = ctx.createLinearGradient(0, 0, 0, 400);
+            const grad = ctx.createLinearGradient(0, 0, 0, GAME_H);
             grad.addColorStop(0, '#1a1a2e');
             grad.addColorStop(1, '#16213e');
             ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, 800, 400);
+            ctx.fillRect(0, 0, GAME_W, GAME_H);
 
             // Confetti
             for (let i = 0; i < 40; i++) {
@@ -1249,10 +1251,12 @@
             ctx.font = 'bold 38px Arial';
             ctx.textAlign = 'center';
 
+            const oy = GAME_H / 2 - 120; // offset vertical
+
             if (winner >= 0) {
-                ctx.fillText(`🏆 ¡GANÓ ${players[winner].name}! 🏆`, 400, 55);
+                ctx.fillText(`🏆 ¡GANÓ ${players[winner].name}! 🏆`, 400, oy);
             } else {
-                ctx.fillText('🤝 ¡EMPATE! 🤝', 400, 55);
+                ctx.fillText('🤝 ¡EMPATE! 🤝', 400, oy);
             }
 
             for (let i = 0; i < 2; i++) {
@@ -1264,52 +1268,52 @@
                 if (isWinner) {
                     ctx.fillStyle = 'rgba(255,215,0,0.15)';
                     ctx.beginPath();
-                    ctx.roundRect(cx - 130, 65, 260, 230, 12);
+                    ctx.roundRect(cx - 130, oy + 10, 260, 230, 12);
                     ctx.fill();
                 }
 
                 ctx.fillStyle = p.color;
                 ctx.font = `bold ${isWinner ? 30 : 24}px Arial`;
                 ctx.textAlign = 'center';
-                ctx.fillText(p.name, cx, 100);
+                ctx.fillText(p.name, cx, oy + 45);
 
                 if (isWinner) {
                     ctx.fillStyle = '#FFD54F';
                     ctx.font = '18px Arial';
-                    ctx.fillText('👑 GANADOR', cx, 125);
+                    ctx.fillText('👑 GANADOR', cx, oy + 70);
                 }
 
-                drawRunner(cx - p.width / 2, 135, p.width, p.height, p, 0, true, Math.floor(Date.now() / 100));
+                drawRunner(cx - p.width / 2, oy + 80, p.width, p.height, p, 0, true, Math.floor(Date.now() / 100));
 
                 ctx.fillStyle = '#FFD54F';
                 ctx.font = 'bold 28px Arial';
-                ctx.fillText(`${b.distance}m`, cx, 225);
+                ctx.fillText(`${b.distance}m`, cx, oy + 170);
 
                 ctx.fillStyle = '#B0BEC5';
                 ctx.font = '14px Arial';
-                ctx.fillText(`Último: ${b.scene}`, cx, 250);
+                ctx.fillText(`Último: ${b.scene}`, cx, oy + 195);
 
                 if (winner === i) {
                     const diff = Math.abs(b0.distance - b1.distance);
                     ctx.fillStyle = '#69F0AE';
                     ctx.font = '13px Arial';
-                    ctx.fillText(`+${diff}m de ventaja`, cx, 275);
+                    ctx.fillText(`+${diff}m de ventaja`, cx, oy + 220);
                 }
             }
 
             ctx.fillStyle = '#4CAF50';
             ctx.beginPath();
-            ctx.roundRect(310, 335, 180, 45, 10);
+            ctx.roundRect(310, oy + 245, 180, 45, 10);
             ctx.fill();
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 17px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('JUGAR DE NUEVO', 400, 364);
+            ctx.fillText('JUGAR DE NUEVO', 400, oy + 274);
         }
 
         // --- DRAW LOOP ---
         function draw() {
-            ctx.clearRect(0, 0, 800, 400);
+            ctx.clearRect(0, 0, GAME_W, GAME_H);
 
             if (state === 'menu') drawMenu();
             else if (state === 'skinSelect') drawSkinSelect();
@@ -1339,8 +1343,8 @@
 
         function getSkinClickIndex(mx, my) {
             const cols = 4, boxW = 120, boxH = 115, gap = 14;
-            const startX = (800 - (cols * boxW + (cols - 1) * gap)) / 2;
-            const startY = 60;
+            const startX = (GAME_W - (cols * boxW + (cols - 1) * gap)) / 2;
+            const startY = (GAME_H - (2 * boxH + gap + 60)) / 2;
             for (let i = 0; i < skins.length; i++) {
                 const col = i % cols;
                 const row = Math.floor(i / cols);
@@ -1352,7 +1356,8 @@
         }
 
         function isSkinConfirmClick(mx, my) {
-            const btnY = 60 + 2 * (115 + 14) + 8;
+            const startY = (GAME_H - (2 * 115 + 14 + 60)) / 2;
+            const btnY = startY + 2 * (115 + 14) + 8;
             return mx >= 310 && mx <= 490 && my >= btnY && my <= btnY + 42;
         }
 
