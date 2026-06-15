@@ -140,6 +140,7 @@
         let frameCount = 0;
         let particles = [];
         let keysDown = {};
+        let touchDucking = false;
         let deadTimer = 0;
 
         // --- PARTÍCULAS ---
@@ -268,14 +269,15 @@
             frameCount++;
             r.runFrame++;
 
-            // Agacharse
+            // Agacharse (teclado)
             if (keysDown['ArrowDown'] || keysDown['KeyS']) {
                 if (!r.ducking && r.grounded) {
                     r.ducking = true;
                     r.h = Math.floor(r.normalH * DUCK_HEIGHT_RATIO);
                     r.y = game.groundY - r.h;
                 }
-            } else {
+            } else if (!touchDucking) {
+                // Solo dejar de agacharse si tampoco está el botón touch apretado
                 if (r.ducking) {
                     r.ducking = false;
                     r.h = r.normalH;
@@ -1407,6 +1409,7 @@
 
         btnDuck.addEventListener('touchstart', e => {
             e.preventDefault();
+            touchDucking = true;
             if (state === 'playing' && game.runner.grounded && !game.runner.ducking) {
                 game.runner.ducking = true;
                 game.runner.h = Math.floor(game.runner.normalH * DUCK_HEIGHT_RATIO);
@@ -1416,12 +1419,12 @@
 
         btnDuck.addEventListener('touchend', e => {
             e.preventDefault();
-            if (state === 'playing' && game.runner.ducking) {
-                game.runner.ducking = false;
-                game.runner.h = game.runner.normalH;
-                game.runner.y = game.groundY - game.runner.h;
-            }
+            touchDucking = false;
         }, { passive: false });
+
+        btnDuck.addEventListener('touchcancel', e => {
+            touchDucking = false;
+        });
 
         // Touch en canvas (para menús/skin select)
         canvas.addEventListener('touchstart', e => {
