@@ -1613,9 +1613,9 @@
             ctx.textAlign = 'center';
             ctx.fillText(`${p.name} - Elegi tu skin`, 400, 50);
 
-            // Skin grid - MUCH BIGGER
-            const cols = 4, boxW = 160, boxH = 150, gap = 16;
-            const startX = (GAME_W - (cols * boxW + (cols - 1) * gap)) / 2;
+            // Skin grid - 2 columns on the left
+            const cols = 2, boxW = 130, boxH = 120, gap = 14;
+            const startX = 30;
             const startY = 75;
 
             for (let i = 0; i < skins.length; i++) {
@@ -1627,7 +1627,7 @@
                 const isSelected = p.skin && p.skin.id === skins[i].id;
                 const isHover = skinHover === i;
 
-                // Box background with better contrast
+                // Box background
                 ctx.fillStyle = isSelected ? 'rgba(255,215,0,0.2)' : isHover ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)';
                 ctx.strokeStyle = isSelected ? '#FFD54F' : isHover ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.2)';
                 ctx.lineWidth = isSelected ? 3 : 1.5;
@@ -1636,74 +1636,93 @@
                 ctx.fill();
                 ctx.stroke();
 
-                // Character preview - BIGGER
+                // Character preview
                 const previewPlayer = { ...p, skin: skins[i] };
                 const pw = skinSelectPlayer === 0 ? 42 : 36;
                 const ph = skinSelectPlayer === 0 ? 68 : 55;
 
-                // Animated preview for selected skin
                 const animFrame = isSelected ? Math.floor(Date.now() / 80) : Math.floor(Date.now() / 120);
-                drawRunner(bx + boxW / 2 - pw / 2, by + 12, pw, ph, previewPlayer, 0, true, animFrame);
+                drawRunner(bx + boxW / 2 - pw / 2, by + 10, pw, ph, previewPlayer, 0, true, animFrame);
 
-                // Label - bigger and more visible
+                // Label
                 ctx.fillStyle = isSelected ? '#FFD54F' : '#CFD8DC';
-                ctx.font = `${isSelected ? 'bold ' : ''}16px Arial`;
+                ctx.font = `${isSelected ? 'bold ' : ''}14px Arial`;
                 ctx.textAlign = 'center';
-                ctx.fillText(skins[i].label, bx + boxW / 2, by + boxH - 12);
+                ctx.fillText(skins[i].label, bx + boxW / 2, by + boxH - 10);
 
                 if (isSelected) {
                     ctx.fillStyle = '#FFD54F';
-                    ctx.font = '22px Arial';
-                    ctx.fillText('✓', bx + boxW - 18, by + 22);
+                    ctx.font = '20px Arial';
+                    ctx.fillText('✓', bx + boxW - 16, by + 20);
                 }
             }
 
-            // Selected skin large preview at bottom
-            const previewY = startY + 2 * (boxH + gap) + 15;
+            // Large preview on the right
+            const prevBoxX = 340, prevBoxY = 75, prevBoxW = 430, prevBoxH = 420;
             const selectedSkin = p.skin || skins[0];
-            const previewBigW = skinSelectPlayer === 0 ? 60 : 50;
-            const previewBigH = skinSelectPlayer === 0 ? 96 : 78;
 
-            // Preview box
-            ctx.fillStyle = 'rgba(255,255,255,0.05)';
-            ctx.strokeStyle = 'rgba(255,215,79,0.3)';
+            // Preview box background
+            ctx.fillStyle = 'rgba(255,255,255,0.04)';
+            ctx.strokeStyle = 'rgba(255,215,79,0.25)';
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.roundRect(40, previewY, 200, 130, 12);
+            ctx.roundRect(prevBoxX, prevBoxY, prevBoxW, prevBoxH, 16);
             ctx.fill();
             ctx.stroke();
 
-            // Animated cycle: run, jump-like pose, duck
+            // Animated ground/grass inside preview
+            const groundY = prevBoxY + prevBoxH - 50;
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(prevBoxX + 20, groundY, prevBoxW - 40, 6);
+            ctx.fillStyle = '#388E3C';
+            ctx.fillRect(prevBoxX + 20, groundY, prevBoxW - 40, 2);
+            // Animated grass blades
+            ctx.fillStyle = '#66BB6A';
+            for (let i = 0; i < 20; i++) {
+                const gx = prevBoxX + 20 + (i * 20 - (Date.now() / 50) % 20);
+                if (gx >= prevBoxX + 20 && gx <= prevBoxX + prevBoxW - 40) {
+                    ctx.fillRect(gx, groundY - 4, 2, 7);
+                }
+            }
+
+            // Big character - scaled ~2.5x
+            const previewBigW = skinSelectPlayer === 0 ? 110 : 95;
+            const previewBigH = skinSelectPlayer === 0 ? 175 : 140;
+            const charCenterX = prevBoxX + prevBoxW / 2;
             const cycleFrame = Math.floor(Date.now() / 100);
             const cycleSec = Math.floor(Date.now() / 1500) % 3;
             const previewP = { ...p, skin: selectedSkin };
+
             if (cycleSec === 2) {
                 // Duck
                 const duckH = Math.floor(previewBigH * DUCK_HEIGHT_RATIO);
-                drawRunner(140 - previewBigW / 2, previewY + 130 - duckH - 10, previewBigW, duckH, previewP, 0, true, cycleFrame, true);
+                drawRunner(charCenterX - previewBigW / 2, groundY - duckH - 4, previewBigW, duckH, previewP, 0, true, cycleFrame, true);
             } else {
-                drawRunner(140 - previewBigW / 2, previewY + 130 - previewBigH - 10, previewBigW, previewBigH, previewP, 0, cycleSec === 0, cycleFrame);
+                drawRunner(charCenterX - previewBigW / 2, groundY - previewBigH - 4, previewBigW, previewBigH, previewP, 0, cycleSec === 0, cycleFrame);
             }
 
+            // Skin name below character
             ctx.fillStyle = '#FFD54F';
-            ctx.font = 'bold 16px Arial';
+            ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(selectedSkin.label, 140, previewY + 125);
+            ctx.fillText(selectedSkin.label, charCenterX, groundY + 30);
 
-            // Confirm button
-            const btnY = previewY + 30;
+            // Confirm button - centered, below everything
+            const btnW = 220, btnH = 50;
+            const btnX = (GAME_W - btnW) / 2;
+            const btnY = 610;
             ctx.save();
             ctx.shadowColor = 'rgba(76,175,80,0.4)';
             ctx.shadowBlur = 10;
             ctx.fillStyle = '#4CAF50';
             ctx.beginPath();
-            ctx.roundRect(560, btnY, 200, 50, 12);
+            ctx.roundRect(btnX, btnY, btnW, btnH, 12);
             ctx.fill();
             ctx.restore();
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 22px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('LISTO', 660, btnY + 33);
+            ctx.fillText('LISTO', GAME_W / 2, btnY + 33);
         }
 
         function drawDeadScreen() {
@@ -1966,8 +1985,8 @@
         }
 
         function getSkinClickIndex(mx, my) {
-            const cols = 4, boxW = 160, boxH = 150, gap = 16;
-            const startX = (GAME_W - (cols * boxW + (cols - 1) * gap)) / 2;
+            const cols = 2, boxW = 130, boxH = 120, gap = 14;
+            const startX = 30;
             const startY = 75;
             for (let i = 0; i < skins.length; i++) {
                 const col = i % cols;
@@ -1980,9 +1999,10 @@
         }
 
         function isSkinConfirmClick(mx, my) {
-            const startY = 75;
-            const btnY = startY + 2 * (150 + 16) + 15 + 30;
-            return mx >= 560 && mx <= 760 && my >= btnY && my <= btnY + 50;
+            const btnW = 220, btnH = 50;
+            const btnX = (GAME_W - btnW) / 2;
+            const btnY = 610;
+            return mx >= btnX && mx <= btnX + btnW && my >= btnY && my <= btnY + btnH;
         }
 
         document.addEventListener('keydown', e => {
