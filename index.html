@@ -165,6 +165,10 @@
         // --- SPEED LINES ---
         let speedLines = [];
 
+        // --- WEATHER & FLASH ---
+        let weatherParticles = [];
+        let sceneFlash = 0;
+
         // --- HUD EFFECTS ---
         let meterPop = 0; // pop animation timer
         let lastThousand = 0; // last thousand milestone
@@ -387,6 +391,8 @@
             };
             particles = [];
             speedLines = [];
+            weatherParticles = [];
+            sceneFlash = 0;
             meterPop = 0;
             lastThousand = 0;
             sceneNameFade = 0;
@@ -405,10 +411,30 @@
                 game.clouds.push({ x: Math.random() * 900, y: 30 + Math.random() * 80, w: 60 + Math.random() * 80, speed: 0.3 + Math.random() * 0.5 });
             }
             for (let i = 0; i < 12; i++) {
-                game.trees.push({ x: Math.random() * 900, h: 40 + Math.random() * 50 });
+                game.trees.push({ x: Math.random() * 900, h: 40 + Math.random() * 50, w: 20 + Math.random() * 20 });
             }
             for (let i = 0; i < 6; i++) {
                 game.hills.push({ x: Math.random() * 1000, w: 150 + Math.random() * 150, h: 40 + Math.random() * 40 });
+            }
+            // Generate weather particles
+            generateWeather();
+        }
+
+        function generateWeather() {
+            weatherParticles = [];
+            const scene = scenes[game.currentScene % scenes.length];
+            if (scene.name === 'Ciudad') {
+                for (let i = 0; i < 40; i++) {
+                    weatherParticles.push({ x: Math.random() * GAME_W, y: Math.random() * game.groundY, speed: 8 + Math.random() * 4, type: 'rain' });
+                }
+            } else if (scene.name === 'Nieve') {
+                for (let i = 0; i < 30; i++) {
+                    weatherParticles.push({ x: Math.random() * GAME_W, y: Math.random() * game.groundY, speed: 1 + Math.random() * 1.5, phase: Math.random() * Math.PI * 2, type: 'snow' });
+                }
+            } else if (scene.name === 'Desierto') {
+                for (let i = 0; i < 20; i++) {
+                    weatherParticles.push({ x: Math.random() * GAME_W, y: 100 + Math.random() * (game.groundY - 150), speed: 5 + Math.random() * 4, type: 'sand' });
+                }
             }
         }
 
@@ -655,6 +681,7 @@
                 sceneNameFade = 120;
                 sceneNameText = scenes[newScene].name;
                 meterFlash = 40;
+                sceneFlash = 20;
                 generateScenery();
                 // Scene change star particles
                 for (let i = 0; i < 15; i++) {
@@ -698,6 +725,27 @@
 
             // Speed lines
             updateSpeedLines(r.speed);
+
+            // Scene flash
+            if (sceneFlash > 0) sceneFlash--;
+
+            // Weather particles
+            for (let i = 0; i < weatherParticles.length; i++) {
+                const wp = weatherParticles[i];
+                if (wp.type === 'rain') {
+                    wp.y += wp.speed;
+                    wp.x -= 2;
+                    if (wp.y > game.groundY) { wp.y = -10; wp.x = Math.random() * GAME_W; }
+                } else if (wp.type === 'snow') {
+                    wp.y += wp.speed;
+                    wp.x += Math.sin(Date.now() * 0.002 + wp.phase) * 0.8;
+                    if (wp.y > game.groundY) { wp.y = -5; wp.x = Math.random() * GAME_W; }
+                } else if (wp.type === 'sand') {
+                    wp.x -= wp.speed;
+                    wp.y += Math.sin(Date.now() * 0.003 + wp.x * 0.01) * 0.5;
+                    if (wp.x < -10) { wp.x = GAME_W + 10; wp.y = 100 + Math.random() * (game.groundY - 150); }
+                }
+            }
 
             // Obstacles - dificultad progresiva
             game.nextObstacle--;
@@ -760,9 +808,17 @@
                     // Escudo activo - absorbe el golpe
                     if (game.shieldActive) {
                         game.shieldActive = false;
+                        // Partículas del color del obstáculo (B12)
+                        const obstColors = {rock:'#78909C', cactus:'#66BB6A', auto:'#E53935', tronco:'#6D4C41', hongo:'#E53935', serpiente:'#F9A825', hielo:'#B3E5FC', snowman:'#fff', cono:'#FF6D00', box:'#8D6E63', meteorito:'#795548', alien:'#76FF03', cristal:'#E040FB'};
+                        const oColor = obstColors[o.type] || '#FFD54F';
+                        const ox = o.x + o.w / 2;
+                        const oy = o.y + o.h / 2;
                         game.obstacles.splice(i, 1);
-                        for (let j = 0; j < 20; j++) {
-                            addParticle(r.x + r.w/2, r.y + r.h/2, (Math.random()-0.5)*8, (Math.random()-0.5)*8, 30, 3 + Math.random()*3, 'rgb(255,215,0)');
+                        for (let j = 0; j < 10; j++) {
+                            addParticle(ox, oy, (Math.random()-0.5)*8, (Math.random()-0.5)*8, 30, 3 + Math.random()*3, oColor);
+                        }
+                        for (let j = 0; j < 8; j++) {
+                            addParticle(ox, oy, (Math.random()-0.5)*6, (Math.random()-0.5)*6, 25, 2 + Math.random()*2, 'rgb(255,215,0)');
                         }
                         continue;
                     }
@@ -1291,10 +1347,20 @@
 
         function drawBirdShape(o, bodyColor, wingColor) {
             const wingY = Math.sin(o.wingFrame * 0.3) * 6;
+            // Cola (B18)
+            ctx.fillStyle = wingColor;
+            ctx.beginPath();
+            ctx.moveTo(o.x + o.w * 0.2, o.y + o.h * 0.45);
+            ctx.lineTo(o.x - 8, o.y + o.h * 0.35);
+            ctx.lineTo(o.x - 6, o.y + o.h * 0.55);
+            ctx.closePath();
+            ctx.fill();
+            // Cuerpo
             ctx.fillStyle = bodyColor;
             ctx.beginPath();
             ctx.ellipse(o.x + o.w / 2, o.y + o.h / 2, o.w * 0.3, o.h * 0.35, 0, 0, Math.PI * 2);
             ctx.fill();
+            // Alas
             ctx.fillStyle = wingColor;
             ctx.beginPath();
             ctx.moveTo(o.x + o.w * 0.3, o.y + o.h * 0.4);
@@ -1308,14 +1374,33 @@
             ctx.lineTo(o.x + o.w * 0.8, o.y + o.h * 0.6);
             ctx.closePath();
             ctx.fill();
+            // Pico (B18)
+            ctx.fillStyle = '#FFB300';
+            ctx.beginPath();
+            ctx.moveTo(o.x + o.w * 0.75, o.y + o.h * 0.42);
+            ctx.lineTo(o.x + o.w * 0.9, o.y + o.h * 0.48);
+            ctx.lineTo(o.x + o.w * 0.75, o.y + o.h * 0.52);
+            ctx.closePath();
+            ctx.fill();
+            // Ojo con parpadeo (B18)
+            const blinking = Math.floor(Date.now() / 2000) % 5 === 0;
             ctx.fillStyle = '#fff';
             ctx.beginPath();
             ctx.arc(o.x + o.w * 0.55, o.y + o.h * 0.4, 2.5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = '#333';
-            ctx.beginPath();
-            ctx.arc(o.x + o.w * 0.57, o.y + o.h * 0.4, 1.2, 0, Math.PI * 2);
-            ctx.fill();
+            if (blinking) {
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.52, o.y + o.h * 0.4);
+                ctx.lineTo(o.x + o.w * 0.6, o.y + o.h * 0.4);
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = '#333';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.57, o.y + o.h * 0.4, 1.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
         }
 
         function drawObstacle(o) {
@@ -1334,6 +1419,36 @@
                 ctx.fillRect(o.x + o.w * 0.7, o.y + o.h * 0.4, o.w * 0.3, o.w * 0.35);
                 ctx.fillStyle = '#43A047';
                 ctx.fillRect(o.x + o.w * 0.4, o.y, o.w * 0.1, o.h);
+                // Espinas (B19)
+                ctx.strokeStyle = '#2E7D32';
+                ctx.lineWidth = 1;
+                const spines = [
+                    [o.x + o.w * 0.3, o.y + o.h * 0.15, -4, 0],
+                    [o.x + o.w * 0.7, o.y + o.h * 0.2, 4, 0],
+                    [o.x + o.w * 0.3, o.y + o.h * 0.45, -4, 0],
+                    [o.x + o.w * 0.7, o.y + o.h * 0.55, 4, 0],
+                    [o.x + o.w * 0.3, o.y + o.h * 0.7, -4, 0],
+                    [o.x + o.w * 0.7, o.y + o.h * 0.75, 4, 0],
+                    [o.x, o.y + o.h * 0.3, -4, -2],
+                    [o.x + o.w, o.y + o.h * 0.5, 4, -2],
+                ];
+                spines.forEach(s => {
+                    ctx.beginPath();
+                    ctx.moveTo(s[0], s[1]);
+                    ctx.lineTo(s[0] + s[2], s[1] + s[3]);
+                    ctx.stroke();
+                });
+                // Flor (B19) - ~30% de los cactus
+                if (Math.sin(o.x * 1.3) > 0.4) {
+                    ctx.fillStyle = '#E91E63';
+                    ctx.beginPath();
+                    ctx.arc(o.x + o.w * 0.5, o.y - 3, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#FDD835';
+                    ctx.beginPath();
+                    ctx.arc(o.x + o.w * 0.5, o.y - 3, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             } else if (t === 'tronco') {
                 ctx.fillStyle = '#6D4C41';
                 ctx.fillRect(o.x, o.y + o.h * 0.3, o.w, o.h * 0.5);
@@ -1348,15 +1463,25 @@
             } else if (t === 'hongo') {
                 ctx.fillStyle = '#BCAAA4';
                 ctx.fillRect(o.x + o.w * 0.35, o.y + o.h * 0.4, o.w * 0.3, o.h * 0.6);
+                // Sombrero con rebote (B20)
+                ctx.save();
+                const bounce = 1 + Math.sin(Date.now() * 0.004) * 0.03;
+                ctx.translate(o.x + o.w / 2, o.y + o.h * 0.4);
+                ctx.scale(1, bounce);
                 ctx.fillStyle = '#E53935';
                 ctx.beginPath();
-                ctx.arc(o.x + o.w / 2, o.y + o.h * 0.4, o.w * 0.5, Math.PI, 0);
+                ctx.arc(0, 0, o.w * 0.5, Math.PI, 0);
                 ctx.fill();
+                // Lunares (B20)
                 ctx.fillStyle = '#fff';
                 ctx.beginPath();
-                ctx.arc(o.x + o.w * 0.35, o.y + o.h * 0.25, 3, 0, Math.PI * 2);
-                ctx.arc(o.x + o.w * 0.65, o.y + o.h * 0.3, 2, 0, Math.PI * 2);
+                ctx.arc(-o.w * 0.15, -o.h * 0.15, 3, 0, Math.PI * 2);
+                ctx.arc(o.w * 0.15, -o.h * 0.1, 2, 0, Math.PI * 2);
+                ctx.arc(0, -o.h * 0.2, 2.5, 0, Math.PI * 2);
+                ctx.arc(-o.w * 0.3, -o.h * 0.05, 1.5, 0, Math.PI * 2);
+                ctx.arc(o.w * 0.3, -o.h * 0.03, 2, 0, Math.PI * 2);
                 ctx.fill();
+                ctx.restore();
             } else if (t === 'serpiente') {
                 ctx.strokeStyle = '#F9A825';
                 ctx.lineWidth = 4;
@@ -1374,6 +1499,21 @@
                 ctx.beginPath();
                 ctx.arc(o.x + o.w + 2, o.y + o.h * 0.25, 1.5, 0, Math.PI * 2);
                 ctx.fill();
+                // Lengua bífida (B13)
+                const tongueOut = Math.sin(Date.now() * 0.005) * 0.5 + 0.5;
+                ctx.strokeStyle = '#E53935';
+                ctx.lineWidth = 1.5;
+                const tx = o.x + o.w + 5;
+                const ty = o.y + o.h * 0.32;
+                const tLen = 4 + tongueOut * 5;
+                ctx.beginPath();
+                ctx.moveTo(tx, ty);
+                ctx.lineTo(tx + tLen, ty - 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(tx, ty);
+                ctx.lineTo(tx + tLen, ty + 2);
+                ctx.stroke();
             } else if (t === 'hielo') {
                 ctx.fillStyle = '#B3E5FC';
                 ctx.beginPath();
@@ -1406,6 +1546,33 @@
                 ctx.lineTo(o.x + o.w * 0.7, o.y + o.h * 0.17);
                 ctx.lineTo(o.x + o.w * 0.5, o.y + o.h * 0.19);
                 ctx.closePath(); ctx.fill();
+                // Brazos (B15)
+                ctx.strokeStyle = '#6D4C41';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.15, o.y + o.h * 0.4);
+                ctx.lineTo(o.x - 5, o.y + o.h * 0.3);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(o.x - 5, o.y + o.h * 0.3);
+                ctx.lineTo(o.x - 8, o.y + o.h * 0.25);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.85, o.y + o.h * 0.4);
+                ctx.lineTo(o.x + o.w + 5, o.y + o.h * 0.3);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w + 5, o.y + o.h * 0.3);
+                ctx.lineTo(o.x + o.w + 8, o.y + o.h * 0.25);
+                ctx.stroke();
+                // Bufanda (B15)
+                ctx.fillStyle = '#E53935';
+                ctx.fillRect(o.x + o.w * 0.3, o.y + o.h * 0.25, o.w * 0.4, 4);
+                ctx.fillRect(o.x + o.w * 0.6, o.y + o.h * 0.25, 4, 10);
+                // Sombrero (B15)
+                ctx.fillStyle = '#212121';
+                ctx.fillRect(o.x + o.w * 0.25, o.y + o.h * 0.03, o.w * 0.5, 3);
+                ctx.fillRect(o.x + o.w * 0.32, o.y - o.h * 0.05, o.w * 0.36, o.h * 0.08);
             } else if (t === 'auto') {
                 ctx.fillStyle = '#E53935';
                 ctx.fillRect(o.x + 5, o.y + o.h * 0.3, o.w - 10, o.h * 0.5);
@@ -1419,8 +1586,30 @@
                 ctx.arc(o.x + 12, o.y + o.h, 5, 0, Math.PI * 2);
                 ctx.arc(o.x + o.w - 12, o.y + o.h, 5, 0, Math.PI * 2);
                 ctx.fill();
+                // Rayos de rueda girando (B16)
+                const wheelAngle = Date.now() * 0.01;
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 1;
+                [o.x + 12, o.x + o.w - 12].forEach(wx => {
+                    for (let r = 0; r < 3; r++) {
+                        const a = wheelAngle + r * Math.PI * 2 / 3;
+                        ctx.beginPath();
+                        ctx.moveTo(wx, o.y + o.h);
+                        ctx.lineTo(wx + Math.cos(a) * 4, o.y + o.h + Math.sin(a) * 4);
+                        ctx.stroke();
+                    }
+                });
+                // Luces frontales (B16)
                 ctx.fillStyle = '#FFD54F';
                 ctx.fillRect(o.x + o.w - 6, o.y + o.h * 0.4, 4, 5);
+                ctx.fillRect(o.x + o.w - 6, o.y + o.h * 0.55, 4, 4);
+                // Luz trasera con glow (B16)
+                ctx.save();
+                ctx.shadowColor = '#E53935';
+                ctx.shadowBlur = 6;
+                ctx.fillStyle = '#E53935';
+                ctx.fillRect(o.x + 2, o.y + o.h * 0.45, 3, 5);
+                ctx.restore();
             } else if (t === 'cono') {
                 ctx.fillStyle = '#FF6D00';
                 ctx.beginPath();
@@ -1438,9 +1627,31 @@
                 ctx.fillRect(o.x + 2, o.y + 2, o.w - 4, 3);
                 ctx.fillRect(o.x + 2, o.y + o.h - 5, o.w - 4, 3);
             } else if (t === 'meteorito') {
+                // Estela de fuego (B17)
+                const cx = o.x + o.w / 2;
+                const cy = o.y + o.h / 2;
+                const flameColors = ['rgba(255,109,0,0.6)', 'rgba(255,87,34,0.4)', 'rgba(255,193,7,0.3)'];
+                for (let f = 0; f < 3; f++) {
+                    const fx = cx - 15 - f * 10 + Math.sin(Date.now() * 0.008 + f) * 3;
+                    const fy = cy + Math.sin(Date.now() * 0.006 + f * 2) * 4;
+                    const fr = 6 - f * 1.5;
+                    ctx.fillStyle = flameColors[f];
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Chispas
+                ctx.fillStyle = 'rgba(255,167,38,0.7)';
+                for (let s = 0; s < 3; s++) {
+                    const sx = cx - 20 - s * 8 + Math.sin(Date.now() * 0.01 + s * 3) * 5;
+                    const sy = cy + Math.cos(Date.now() * 0.012 + s * 2) * 6;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 ctx.fillStyle = '#795548';
                 ctx.beginPath();
-                ctx.arc(o.x + o.w / 2, o.y + o.h / 2, o.w * 0.45, 0, Math.PI * 2);
+                ctx.arc(cx, cy, o.w * 0.45, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.fillStyle = '#FF6D00';
                 ctx.beginPath();
@@ -1448,6 +1659,9 @@
                 ctx.arc(o.x + o.w * 0.65, o.y + o.h * 0.6, 3, 0, Math.PI * 2);
                 ctx.fill();
             } else if (t === 'alien') {
+                ctx.save();
+                ctx.shadowColor = '#76FF03';
+                ctx.shadowBlur = 8;
                 ctx.fillStyle = '#76FF03';
                 ctx.beginPath();
                 ctx.ellipse(o.x + o.w / 2, o.y + o.h * 0.6, o.w * 0.35, o.h * 0.4, 0, 0, Math.PI * 2);
@@ -1461,6 +1675,25 @@
                 ctx.ellipse(o.x + o.w * 0.35, o.y + o.h * 0.18, 4, 5, -0.2, 0, Math.PI * 2);
                 ctx.ellipse(o.x + o.w * 0.65, o.y + o.h * 0.18, 4, 5, 0.2, 0, Math.PI * 2);
                 ctx.fill();
+                // Antenas (B14)
+                ctx.strokeStyle = '#69F0AE';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.35, o.y + o.h * 0.05);
+                ctx.lineTo(o.x + o.w * 0.2, o.y - 8);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(o.x + o.w * 0.65, o.y + o.h * 0.05);
+                ctx.lineTo(o.x + o.w * 0.8, o.y - 8);
+                ctx.stroke();
+                ctx.fillStyle = '#76FF03';
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.2, o.y - 8, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(o.x + o.w * 0.8, o.y - 8, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
             } else if (t === 'cristal') {
                 ctx.fillStyle = '#E040FB';
                 ctx.beginPath();
@@ -1524,10 +1757,103 @@
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, GAME_W, game.groundY);
 
-            // Stars in space
-            if (currentScene().isSpace) {
-                ctx.fillStyle = '#fff';
-                for (let i = 0; i < 60; i++) {
+            // Celestial body (A1)
+            const sceneIdx = game.currentScene % scenes.length;
+            if (sceneIdx === 0) {
+                // Bosque: sol amarillo con rayos
+                ctx.save();
+                ctx.fillStyle = '#FFD54F';
+                ctx.shadowColor = '#FFD54F';
+                ctx.shadowBlur = 30;
+                ctx.beginPath();
+                ctx.arc(680, 70, 30, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(255,213,79,0.4)';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4 + Date.now() * 0.0005;
+                    ctx.beginPath();
+                    ctx.moveTo(680 + Math.cos(angle) * 35, 70 + Math.sin(angle) * 35);
+                    ctx.lineTo(680 + Math.cos(angle) * 50, 70 + Math.sin(angle) * 50);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            } else if (sceneIdx === 1) {
+                // Desierto: sol grande naranja (atardecer)
+                ctx.save();
+                ctx.fillStyle = '#FF8F00';
+                ctx.shadowColor = '#FF6F00';
+                ctx.shadowBlur = 50;
+                ctx.beginPath();
+                ctx.arc(600, 130, 50, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(255,143,0,0.15)';
+                ctx.beginPath();
+                ctx.arc(600, 130, 75, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (sceneIdx === 2) {
+                // Nieve: luna blanca con cráteres
+                ctx.save();
+                ctx.fillStyle = '#ECEFF1';
+                ctx.shadowColor = '#B3E5FC';
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(120, 60, 28, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = 'rgba(176,190,197,0.4)';
+                ctx.beginPath();
+                ctx.arc(110, 55, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(128, 68, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(118, 72, 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (sceneIdx === 3) {
+                // Ciudad: luna creciente
+                ctx.save();
+                ctx.fillStyle = '#FFF9C4';
+                ctx.shadowColor = '#FFF9C4';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(680, 55, 20, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = scenes[3].sky1;
+                ctx.beginPath();
+                ctx.arc(690, 50, 17, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            } else if (sceneIdx === 4) {
+                // Espacio: planeta con anillos (Saturno)
+                ctx.save();
+                ctx.fillStyle = '#9C27B0';
+                ctx.shadowColor = '#E040FB';
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.arc(650, 80, 25, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(233,30,99,0.5)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.ellipse(650, 80, 45, 10, -0.3, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeStyle = 'rgba(206,147,216,0.3)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.ellipse(650, 80, 55, 13, -0.3, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            // Stars in space and city (A3)
+            if (sceneIdx === 3 || sceneIdx === 4) {
+                const starCount = sceneIdx === 3 ? 30 : 60;
+                const starAlpha = sceneIdx === 3 ? 0.4 : 1;
+                ctx.fillStyle = `rgba(255,255,255,${starAlpha})`;
+                for (let i = 0; i < starCount; i++) {
                     const sx = (i * 97 + Math.sin(i) * 50) % 800;
                     const sy = (i * 53 + Math.cos(i) * 30) % (game.groundY - 20);
                     const size = 1 + Math.sin(Date.now() / 500 + i) * 0.5;
@@ -1537,9 +1863,15 @@
                 }
             }
 
-            // Clouds (not in space)
-            if (game.currentScene !== 4) {
-                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            // Clouds - differentiated by scene (A4)
+            if (sceneIdx !== 4) {
+                const cloudColors = [
+                    'rgba(255,255,255,0.7)',     // Bosque
+                    'rgba(255,180,130,0.5)',      // Desierto
+                    'rgba(240,240,255,0.85)',     // Nieve
+                    'rgba(120,120,130,0.6)'       // Ciudad
+                ];
+                ctx.fillStyle = cloudColors[sceneIdx] || 'rgba(255,255,255,0.7)';
                 game.clouds.forEach(c => {
                     ctx.beginPath();
                     ctx.arc(c.x, c.y, c.w * 0.25, 0, Math.PI * 2);
@@ -1549,15 +1881,85 @@
                 });
             }
 
-            // Mountains (far layer - speed * 0.1)
+            // Weather particles (A2)
+            weatherParticles.forEach(wp => {
+                if (wp.type === 'rain') {
+                    ctx.strokeStyle = 'rgba(130,200,255,0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(wp.x, wp.y);
+                    ctx.lineTo(wp.x - 3, wp.y + 12);
+                    ctx.stroke();
+                } else if (wp.type === 'snow') {
+                    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+                    ctx.beginPath();
+                    ctx.arc(wp.x, wp.y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (wp.type === 'sand') {
+                    ctx.fillStyle = 'rgba(210,180,120,0.5)';
+                    ctx.beginPath();
+                    ctx.arc(wp.x, wp.y, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Mountains (far layer - speed * 0.1) - organic shapes (A5)
             ctx.fillStyle = lvl.mountain;
             for (let i = 0; i < 4; i++) {
                 const mx = i * 250 - (game.bgOffset * 0.1) % 250;
+                const peakH = sceneIdx === 1 ? 70 : 100; // dunas más suaves
                 ctx.beginPath();
                 ctx.moveTo(mx, game.groundY);
-                ctx.lineTo(mx + 125, game.groundY - 100);
-                ctx.lineTo(mx + 250, game.groundY);
+                if (sceneIdx === 1) {
+                    // Desierto: dunas suaves
+                    ctx.quadraticCurveTo(mx + 60, game.groundY - peakH * 0.7, mx + 125, game.groundY - peakH);
+                    ctx.quadraticCurveTo(mx + 190, game.groundY - peakH * 0.7, mx + 250, game.groundY);
+                } else if (sceneIdx === 4) {
+                    // Espacio: picos agudos
+                    ctx.lineTo(mx + 100, game.groundY - 30);
+                    ctx.lineTo(mx + 125, game.groundY - 110);
+                    ctx.lineTo(mx + 150, game.groundY - 30);
+                    ctx.lineTo(mx + 250, game.groundY);
+                } else {
+                    // Bosque/Nieve/Ciudad: picos redondeados
+                    ctx.quadraticCurveTo(mx + 80, game.groundY - peakH * 0.5, mx + 125, game.groundY - peakH);
+                    ctx.quadraticCurveTo(mx + 170, game.groundY - peakH * 0.5, mx + 250, game.groundY);
+                }
                 ctx.fill();
+                // Sombra lateral
+                ctx.fillStyle = 'rgba(0,0,0,0.08)';
+                ctx.beginPath();
+                ctx.moveTo(mx + 125, game.groundY - peakH);
+                ctx.lineTo(mx + 250, game.groundY);
+                ctx.lineTo(mx + 185, game.groundY);
+                ctx.closePath();
+                ctx.fill();
+                ctx.fillStyle = lvl.mountain;
+                // Nieve en la punta (Bosque/Nieve)
+                if (sceneIdx === 0 || sceneIdx === 2) {
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(mx + 115, game.groundY - peakH + 15);
+                    ctx.lineTo(mx + 125, game.groundY - peakH);
+                    ctx.lineTo(mx + 135, game.groundY - peakH + 15);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = lvl.mountain;
+                }
+                // Espacio: glow sutil
+                if (sceneIdx === 4) {
+                    ctx.save();
+                    ctx.shadowColor = '#7C4DFF';
+                    ctx.shadowBlur = 12;
+                    ctx.strokeStyle = 'rgba(124,77,255,0.3)';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(mx + 100, game.groundY - 30);
+                    ctx.lineTo(mx + 125, game.groundY - 110);
+                    ctx.lineTo(mx + 150, game.groundY - 30);
+                    ctx.stroke();
+                    ctx.restore();
+                }
             }
 
             // Hills (middle layer - speed * 0.2) - NEW PARALLAX LAYER
@@ -1569,21 +1971,122 @@
                 ctx.fill();
             });
 
-            // Trees/buildings (speed * 0.3)
-            if (currentScene().isCity) {
+            // Trees/buildings (speed * 0.3) - varied by scene (A6, A7)
+            if (sceneIdx === 3) {
+                // Ciudad: edificios mejorados (A7)
                 game.trees.forEach(t => {
+                    const bw = Math.floor(t.w || 28);
+                    const bh = t.h + 20;
+                    const bx = t.x;
+                    const by = game.groundY - bh;
                     ctx.fillStyle = '#546E7A';
-                    ctx.fillRect(t.x, game.groundY - t.h - 20, 28, t.h + 20);
-                    ctx.fillStyle = '#FFD54F';
-                    for (let wy = 0; wy < t.h; wy += 15) {
-                        for (let wx = 4; wx < 24; wx += 10) {
+                    ctx.fillRect(bx, by, bw, bh);
+                    // Techo con borde claro
+                    ctx.fillStyle = '#78909C';
+                    ctx.fillRect(bx, by, bw, 3);
+                    // Ventanas
+                    for (let wy = 6; wy < bh - 8; wy += 15) {
+                        for (let wx = 4; wx < bw - 6; wx += 10) {
                             if (Math.sin(t.x + wy + wx) > 0) {
-                                ctx.fillRect(t.x + wx, game.groundY - t.h - 15 + wy, 5, 7);
+                                const bright = Math.sin(t.x * 3 + wy * 2 + wx) > 0.6;
+                                ctx.fillStyle = bright ? '#FFE082' : '#FFD54F';
+                                ctx.fillRect(bx + wx, by + wy, 5, 7);
                             }
                         }
                     }
+                    // Antena en algunos
+                    if (Math.sin(t.x * 1.7) > 0.3) {
+                        ctx.strokeStyle = '#90A4AE';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(bx + bw / 2, by);
+                        ctx.lineTo(bx + bw / 2, by - 12);
+                        ctx.stroke();
+                        ctx.fillStyle = '#EF5350';
+                        ctx.beginPath();
+                        ctx.arc(bx + bw / 2, by - 13, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+            } else if (sceneIdx === 1) {
+                // Desierto: palmeras (A6)
+                game.trees.forEach(t => {
+                    ctx.save();
+                    ctx.strokeStyle = lvl.treeTrunk;
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.moveTo(t.x + 11, game.groundY);
+                    ctx.quadraticCurveTo(t.x + 5, game.groundY - t.h * 0.6, t.x + 15, game.groundY - t.h);
+                    ctx.stroke();
+                    // Hojas en abanico
+                    ctx.fillStyle = lvl.treeLeaf1;
+                    for (let a = 0; a < 5; a++) {
+                        const angle = -Math.PI * 0.8 + a * Math.PI * 0.4;
+                        ctx.beginPath();
+                        ctx.moveTo(t.x + 15, game.groundY - t.h);
+                        ctx.quadraticCurveTo(
+                            t.x + 15 + Math.cos(angle) * 20, game.groundY - t.h + Math.sin(angle) * 15,
+                            t.x + 15 + Math.cos(angle) * 30, game.groundY - t.h + Math.sin(angle) * 25
+                        );
+                        ctx.lineWidth = 3;
+                        ctx.strokeStyle = lvl.treeLeaf1;
+                        ctx.stroke();
+                    }
+                    ctx.restore();
+                });
+            } else if (sceneIdx === 2) {
+                // Nieve: pinos con triángulos apilados (A6)
+                game.trees.forEach(t => {
+                    ctx.fillStyle = lvl.treeTrunk;
+                    ctx.fillRect(t.x + 8, game.groundY - 15, 6, 15);
+                    ctx.fillStyle = lvl.treeLeaf1;
+                    for (let level = 0; level < 3; level++) {
+                        const ly = game.groundY - 18 - level * 14;
+                        const lw = 22 - level * 4;
+                        ctx.beginPath();
+                        ctx.moveTo(t.x + 11 - lw / 2, ly);
+                        ctx.lineTo(t.x + 11, ly - 18);
+                        ctx.lineTo(t.x + 11 + lw / 2, ly);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                    // Nieve en puntas
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath();
+                    ctx.moveTo(t.x + 7, game.groundY - 56);
+                    ctx.lineTo(t.x + 11, game.groundY - 60);
+                    ctx.lineTo(t.x + 15, game.groundY - 56);
+                    ctx.closePath();
+                    ctx.fill();
+                });
+            } else if (sceneIdx === 4) {
+                // Espacio: cristales/hongos alienígenas (A6)
+                game.trees.forEach(t => {
+                    ctx.save();
+                    ctx.shadowColor = lvl.treeLeaf1;
+                    ctx.shadowBlur = 8;
+                    ctx.fillStyle = lvl.treeLeaf1;
+                    // Cristal principal
+                    ctx.beginPath();
+                    ctx.moveTo(t.x + 11, game.groundY - t.h);
+                    ctx.lineTo(t.x + 20, game.groundY - t.h * 0.4);
+                    ctx.lineTo(t.x + 18, game.groundY);
+                    ctx.lineTo(t.x + 4, game.groundY);
+                    ctx.lineTo(t.x + 2, game.groundY - t.h * 0.4);
+                    ctx.closePath();
+                    ctx.fill();
+                    // Cristal pequeño
+                    ctx.fillStyle = lvl.treeLeaf2;
+                    ctx.beginPath();
+                    ctx.moveTo(t.x + 20, game.groundY - t.h * 0.5);
+                    ctx.lineTo(t.x + 25, game.groundY - t.h * 0.15);
+                    ctx.lineTo(t.x + 22, game.groundY);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.restore();
                 });
             } else {
+                // Bosque: frondosos (original, A6)
                 game.trees.forEach(t => {
                     ctx.fillStyle = lvl.treeTrunk;
                     ctx.fillRect(t.x + 8, game.groundY - t.h, 6, t.h);
@@ -1603,6 +2106,59 @@
             ctx.fillRect(0, game.groundY, GAME_W, GAME_H - game.groundY);
             ctx.fillStyle = lvl.groundLine;
             ctx.fillRect(0, game.groundY, GAME_W, 4);
+
+            // Ground texture (A8)
+            if (sceneIdx === 0) {
+                // Bosque: piedras pequeñas
+                ctx.fillStyle = 'rgba(120,120,120,0.3)';
+                for (let i = 0; i < 15; i++) {
+                    const gx = (i * 55 + 10 - game.bgOffset * 0.5) % 840;
+                    ctx.beginPath();
+                    ctx.arc(gx, game.groundY + 12 + (i % 3) * 8, 2 + (i % 2), 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (sceneIdx === 1) {
+                // Desierto: grietas y ondulaciones
+                ctx.strokeStyle = 'rgba(160,120,60,0.3)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 8; i++) {
+                    const gx = (i * 110 - game.bgOffset * 0.5) % 880;
+                    ctx.beginPath();
+                    ctx.moveTo(gx, game.groundY + 8);
+                    ctx.lineTo(gx + 15, game.groundY + 14);
+                    ctx.lineTo(gx + 10, game.groundY + 20);
+                    ctx.stroke();
+                }
+            } else if (sceneIdx === 2) {
+                // Nieve: montículos
+                ctx.fillStyle = 'rgba(255,255,255,0.4)';
+                for (let i = 0; i < 10; i++) {
+                    const gx = (i * 85 - game.bgOffset * 0.5) % 860;
+                    ctx.beginPath();
+                    ctx.arc(gx, game.groundY + 4, 8 + (i % 3) * 3, Math.PI, 0);
+                    ctx.fill();
+                }
+            } else if (sceneIdx === 3) {
+                // Ciudad: línea punteada amarilla (carretera)
+                ctx.strokeStyle = 'rgba(255,213,79,0.6)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([12, 8]);
+                ctx.beginPath();
+                ctx.moveTo(0, game.groundY + 18);
+                ctx.lineTo(GAME_W, game.groundY + 18);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            } else if (sceneIdx === 4) {
+                // Espacio: cráteres
+                ctx.strokeStyle = 'rgba(100,50,150,0.4)';
+                ctx.lineWidth = 1;
+                for (let i = 0; i < 8; i++) {
+                    const gx = (i * 105 + 20 - game.bgOffset * 0.5) % 850;
+                    ctx.beginPath();
+                    ctx.arc(gx, game.groundY + 15, 5 + (i % 3) * 2, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
 
             // Grass (close layer - speed * 0.8)
             ctx.fillStyle = lvl.grass;
@@ -1708,6 +2264,12 @@
                 ctx.shadowBlur = 10;
                 ctx.fillText(sceneNameText, GAME_W / 2, 120);
                 ctx.restore();
+            }
+
+            // Scene transition flash (A9)
+            if (sceneFlash > 0) {
+                ctx.fillStyle = `rgba(255,255,255,${sceneFlash / 50})`;
+                ctx.fillRect(0, 0, GAME_W, GAME_H);
             }
         }
 
